@@ -1,0 +1,16 @@
+python-dotenv
+requests
+tiktoken
+langchain
+langchain-community
+langchain-core
+langchain-openai
+chromadb
+pdfplumber
+pymysql
+sqlalchemy
+pandas
+openpyxl
+openai
+numpy
+tqdm
