@@ -2,13 +2,12 @@ name: Daily Exchange Rates Update
 
 on:
   schedule:
-    - cron: '40 6 * * *'
+    - cron: '00 00 * * *'
   workflow_dispatch:
 
 jobs:
   fetch-and-save:
     runs-on: ubuntu-latest
-    # UI 설정을 덮어쓰기 위해 Job 레벨에 권한 명시
     permissions:
       contents: write
       pull-requests: write
@@ -17,7 +16,7 @@ jobs:
       - name: 저장소 체크아웃
         uses: actions/checkout@v4 # 최신 v4 권장
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
 
       - name: Python 설정
         uses: actions/setup-python@v4
