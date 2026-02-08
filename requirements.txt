@@ -14,3 +14,4 @@ openpyxl
 openai
 numpy
 tqdm
+langchain-experimental 

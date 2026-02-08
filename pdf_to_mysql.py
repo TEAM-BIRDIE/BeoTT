@@ -14,7 +14,7 @@ DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
-DB_NAME = os.getenv("DB_NAME", "fin_dictionary")
+DB_NAME = os.getenv("DB_NAME", "fintech_agent")
 
 PDF_FILE_PATH = "economic_terms.pdf"
 
