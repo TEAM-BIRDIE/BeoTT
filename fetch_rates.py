@@ -3,6 +3,7 @@ import os
 import sys
 import pandas as pd
 import logging
+import json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -22,18 +23,15 @@ def setup_logging():
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
     
-    # 2. 로그 파일 경로 (execution.log 로 고정하여 매번 덮어쓰기)
+    # 2. 로그 파일 경로 (매번 덮어쓰기 모드 'w')
     log_file = os.path.join(log_dir, "execution.log")
 
-    # 3. 로거 설정
-    # 'filemode="w"' -> 파일을 열 때마다 기존 내용을 지우고 새로 씀 (덮어쓰기)
-    # 'filemode="a"' -> 기존 내용 뒤에 계속 이어 붙이기 (Append)
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] %(levelname)s: %(message)s",
         handlers=[
-            logging.FileHandler(log_file, mode='w', encoding='utf-8'), # 파일 저장 (덮어쓰기 모드)
-            logging.StreamHandler(sys.stdout) # 터미널 출력
+            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
         ]
     )
     logging.info("📝 로그 설정 완료. 자동화 작업을 시작합니다.")
@@ -48,6 +46,11 @@ def fetch_koreaexim_rates():
     target_date = datetime.now()
     max_retries = 10 
     
+    # [중요] 브라우저인 척 위장하기 위한 헤더
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
     url = "https://www.koreaexim.go.kr/site/program/financial/exchangeJSON"
 
     for i in range(max_retries):
@@ -61,10 +64,18 @@ def fetch_koreaexim_rates():
         }
 
         try:
-            response = requests.get(url, params=params, verify=False)
+            # timeout 설정 추가 (무한 대기 방지)
+            response = requests.get(url, params=params, headers=headers, verify=False, timeout=20)
             
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    # HTML 에러 페이지가 반환된 경우 (JSON 파싱 실패)
+                    logging.error(f"❌ JSON 파싱 실패 (서버가 HTML 반환함). 응답 일부: {response.text[:100]}")
+                    target_date -= timedelta(days=1)
+                    continue
+
                 if isinstance(data, list) and data:
                     logging.info(f"✅ 성공! {search_date_str} 기준 데이터를 가져왔습니다.")
                     return data, search_date_str 
@@ -147,7 +158,7 @@ def process_and_save(data, date_str):
     # 3. 기준일자 추가
     df['기준일자'] = date_str
     
-    # 4. 숫자 컬럼 변환
+    # 4. 숫자 컬럼 변환 (콤마 제거)
     target_numeric_cols = [
         '매매기준율', '전신환_받으실때', '전신환_보내실때', 
         '장부가격', '년환가료율', '10일환가료율', 
