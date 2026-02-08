@@ -2,21 +2,22 @@ name: Daily Exchange Rates Update
 
 on:
   schedule:
-    # 한국 시간 아침 09:00 = UTC 00:00
     - cron: '0 0 * * *'
-  workflow_dispatch: # 수동 실행 버튼 추가
+  workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  
 jobs:
   fetch-and-save:
     runs-on: ubuntu-latest
+    # UI 설정을 덮어쓰기 위해 Job 레벨에 권한 명시
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: 저장소 체크아웃
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # 최신 v4 권장
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Python 설정
         uses: actions/setup-python@v4
@@ -38,9 +39,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # data 폴더의 파일을 스테이징
           git add data/exchange_rates.csv logs/execution.log
-          
-          # 변경사항이 있을 때만 커밋
           git commit -m "Update exchange rates [$(date)]" || exit 0
-          git push
+          
+          # UI에서 막혀있을 때를 대비해 명시적 푸시
+          git push origin HEAD:${{ github.ref }}
