@@ -16,7 +16,7 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_NAME = os.getenv("DB_NAME", "fintech_agent")
 
-PDF_FILE_PATH = "economic_terms.pdf"
+PDF_FILE_PATH = os.path.join(BASE_DIR, "..", "data", "economic_terms.pdf")
 
 # 페이지 설정
 INDEX_START_PAGE = 5   

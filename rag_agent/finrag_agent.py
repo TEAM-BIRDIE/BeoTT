@@ -63,15 +63,16 @@ def translate_query_to_korean(user_query):
     )
     return response.choices[0].message.content.strip()
 
-# 🔥 [핵심] 외부(main_agent.py)에서 호출할 공식 함수
+# 🔥 외부(main_agent.py)에서 호출할 공식 함수
 def get_rag_answer(user_query):
     # 호출 시점에 데이터가 로드 안 되어 있다면 로드
     if df is None:
         load_knowledge_base()
 
-    # 1. 번역 단계
-    korean_search_term = translate_query_to_korean(user_query)
-    
+    # [수정 1] 번역 단계 삭제 (이미 main_agent에서 한국어로 줌)
+    # korean_search_term = translate_query_to_korean(user_query) <- 삭제
+    korean_search_term = user_query # 받은 그대로 검색어로 사용
+
     # 2. 검색 단계
     relevant_docs = search_docs(korean_search_term)
     
@@ -84,11 +85,14 @@ def get_rag_answer(user_query):
     for idx, row in relevant_docs.iterrows():
         context_text += f"Term: {row['word']}\nDefinition: {row['definition']}\n\n"
 
-    # 4. 답변 생성
+    # [수정 2] 시스템 프롬프트 변경 (한국어 답변 강제)
     system_prompt = f"""
     You are a helpful Financial Expert AI. 
     Explain the financial concept based on the [Context].
-    You MUST answer in the SAME LANGUAGE as the user's question.
+    
+    [Rules]
+    1. Answer ONLY in Korean. (무조건 한국어로 답변하세요)
+    2. Explain clearly and easily.
     
     [Context]
     {context_text}
@@ -102,8 +106,8 @@ def get_rag_answer(user_query):
         ],
         temperature=0
     )
-    
-    return response.choices[0].message.content
+
+    return response.choices[0].message.content.strip()
 
 # 단독 테스트용
 if __name__ == "__main__":
