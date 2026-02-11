@@ -89,28 +89,85 @@ def ask_llm(text):
     except Exception as e:
         print(f"오류 발생 (LLM): {e}")
         return None
-
 # --- 메인 실행 흐름 ---
 if __name__ == "__main__":
-    # 1. 마이크 입력 받기
-    audio_file = listen_from_mic()
-    
-    if audio_file:
-        # 2. 음성을 텍스트로 변환 (Whisper)
-        user_prompt = transcribe_audio(audio_file)
-        
-        if user_prompt:
-            print(f"\n🗣️ 인식된 질문: {user_prompt}\n")
-            print("-" * 30)
+    retry_mic = False  # 음성 인식 자동 재시도를 제어할 상태 변수 추가
+
+    while True:
+        # 1. 입력 방식 선택
+        if retry_mic:
+            # LLM이 모른다고 답변해서 질문 단계 없이 자동으로 음성 인식 시작
+            choice = 'm'
+            retry_mic = False  # 다음 루프를 위해 플래그 초기화
+            print("\n🔄 LLM이 답변을 찾지 못했습니다. 자동으로 음성 인식을 다시 시작합니다.")
+        else:
+            # 일반적인 경우: 사용자에게 입력 방식 선택 요청
+            choice = input("\n⌨️ 텍스트 입력은 't', 🎤 음성 입력은 'm', 종료하려면 'q'를 눌러주세요: ").strip().lower()
+
+        if choice == 'q' or choice == '종료':
+            print("👋 대화를 종료합니다.")
+            break
+
+        # [A] 텍스트 입력 방식
+        if choice == 't':
+            user_prompt = input("💬 질문을 타이핑해 주세요: ").strip()
             
-            # 3. LLM에게 질문하고 답변 받기 (GPT)
-            ai_response = ask_llm(user_prompt)
+            if not user_prompt:
+                print("⚠️ 아무것도 입력되지 않았습니다. 다시 시도해 주세요.")
+                continue
+                
+            if "종료" in user_prompt or "그만" in user_prompt:
+                print("👋 대화를 종료합니다.")
+                break
+
+        # [B] 마이크 음성 입력 방식
+        elif choice == 'm':
+            audio_file = listen_from_mic()
             
-            if ai_response:
-                print(f"🤖 AI 답변:\n{ai_response}")
+            # 음성 감지 실패 시
+            if not audio_file:
+                print("⚠️ 다시 시도합니다. 마이크에 가까이 대고 말씀해 주세요.")
+                continue 
             
-            # 임시 파일 삭제
+            # 음성을 텍스트로 변환 (Whisper)
+            user_prompt = transcribe_audio(audio_file)
+            
+            # 파일은 변환 후 바로 삭제
             if os.path.exists(audio_file):
                 os.remove(audio_file)
+            
+            # 텍스트 변환 실패 시
+            if not user_prompt or user_prompt.strip() == "":
+                print("⚠️ 음성 인식에 실패했거나 아무 말씀도 하지 않으셨습니다. 다시 질문해 주세요.")
+                continue
+
+            print(f"\n🗣️ 인식된 질문: {user_prompt}")
+            
+            if "종료" in user_prompt or "그만" in user_prompt:
+                print("👋 대화를 종료합니다.")
+                break
+
+        # [C] 잘못된 키 입력 처리
         else:
-            print("음성 인식에 실패했습니다.")
+            print("⚠️ 잘못된 입력입니다. 't', 'm', 'q' 중에서 하나를 입력해 주세요.")
+            continue
+
+        print("-" * 30)
+        
+        # 2. LLM에게 질문하고 답변 받기 (GPT)
+        ai_response = ask_llm(user_prompt)
+        
+        # 3. LLM 답변 출력 및 재시도 조건 확인
+        if ai_response:
+            print(f"🤖 AI 답변:\n{ai_response}")
+            
+            # --- 추가된 로직: LLM이 모른다고 했을 때 재시도 처리 ---
+            # LLM의 답변에 포함될 수 있는 '모른다'는 뉘앙스의 키워드들 리스트
+            unknown_keywords = ["모르겠", "알 수 없", "이해하지 못", "죄송하지만"]
+            
+            # 답변 문자열 안에 위 키워드가 하나라도 포함되어 있는지 검사
+            if any(keyword in ai_response for keyword in unknown_keywords):
+                retry_mic = True  # 다음 반복에서 자동으로 마이크가 켜지도록 설정
+                
+        else:
+            print("⚠️ AI가 답변을 생성하지 못했습니다. 다시 시도해 주세요.")
