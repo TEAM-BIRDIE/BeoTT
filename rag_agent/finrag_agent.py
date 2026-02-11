@@ -16,8 +16,9 @@ df = None
 embedding_matrix = None
 
 # 프롬프트 파일 경로 설정
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROMPT_PATH = os.path.join(BASE_DIR, "prompts", "system_prompt.md")
+CURRENT_FILE_PATH = Path(__file__).resolve() 
+PROJECT_ROOT = CURRENT_FILE_PATH.parent.parent 
+PROMPT_PATH = PROJECT_ROOT / "utils" / "system_prompt.md" 
 
 def load_knowledge_base():
     """DB 데이터 로딩"""
@@ -90,7 +91,7 @@ def get_rag_answer(korean_query, original_query=None):
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": formatted_system_prompt},
-            {"role": "user", "content": korean_query}
+            {"role": "user", "content": f"질문에 대해 초등학생 선생님처럼 핵심만 짧게 답변해 주세요: {korean_query}"}
         ],
         temperature=0.3
     )
