@@ -209,7 +209,7 @@ def resolve_contact_name(user_id, user_input):
 
 def get_primary_account(user_id):
     query = f"""
-    SELECT account_id, balance, currency_code
+    SELECT account_id, balance
     FROM accounts
     WHERE user_id = {user_id}
     AND is_primary = 1
