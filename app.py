@@ -1,14 +1,10 @@
 import streamlit as st
 import time
-import pymysql
-import os
 import bcrypt
 from dotenv import load_dotenv
 
 from utils.handle_sql import get_data, execute_query
 from rag_agent.main_agent import run_fintech_agent
-from streamlit_mic_recorder import mic_recorder
-from whisper.mic_prompt import transcribe_audio_bytes
 
 load_dotenv()
 
@@ -83,9 +79,7 @@ if 'user_name_real' not in st.session_state:
     st.session_state['user_name_real'] = None
 if 'page' not in st.session_state:
     st.session_state['page'] = 'login'
-# 로그인 방식 상태 (pin 또는 password)
-if 'login_method' not in st.session_state:
-    st.session_state['login_method'] = 'pin' 
+
 if 'messages' not in st.session_state:
     st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다. 🦋"}]
 if 'chat_sessions' not in st.session_state:
@@ -107,20 +101,14 @@ def login_page():
     
     with col2:
         # 로그인 방식에 따라 제목과 입력창 변경
-        is_pin_mode = st.session_state['login_method'] == 'pin'
-        mode_title = "PIN Code" if is_pin_mode else "Password"
+        mode_title = "Password"
         
         with st.form("login_form"):
             st.markdown("<h1 style='text-align: center; font-size: 3.5rem; margin-bottom:0;'>🦋</h1>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='text-align: center; color: #1E293B;'>{mode_title} Login</h2>", unsafe_allow_html=True)
             
             username = st.text_input("아이디 (Username)", placeholder="example@woorifis.com")
-            
-            # 모드에 따른 비밀번호 입력창 구분
-            if is_pin_mode:
-                password_input = st.text_input("간편 비밀번호 (PIN 6자리)", type="password", placeholder="••••••")
-            else:
-                password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
+            password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
             
             st.markdown("####") 
             submitted = st.form_submit_button("로그인")
@@ -136,7 +124,7 @@ def login_page():
                         db_pw = user_data[0]['password']
                         korean_name = user_data[0]['korean_name']
                         
-                        target_hash = db_pin if is_pin_mode else db_pw
+                        target_hash = db_pw
                         
                         # DB값이 없을 경우(기존 데이터 등) 방어 로직
                         if not target_hash:
@@ -167,19 +155,9 @@ def login_page():
 
         # 로그인 방식 전환 버튼 및 회원가입 버튼
         st.write("")
-        b_col1, b_col2 = st.columns(2)
-        
-        with b_col1:
-            # 토글 버튼 로직
-            toggle_label = "🔑 비밀번호로 로그인" if is_pin_mode else "🔢 PIN으로 로그인"
-            if st.button(toggle_label, use_container_width=True):
-                st.session_state['login_method'] = 'password' if is_pin_mode else 'pin'
-                st.rerun()
-                
-        with b_col2:
-             if st.button("✨ 회원가입", type="secondary", use_container_width=True):
-                 st.session_state['page'] = 'register'
-                 st.rerun()
+        if st.button("✨ 회원가입", type="secondary", use_container_width=True):
+            st.session_state['page'] = 'register'
+            st.rerun()
 
 def register_page():
     st.write("")

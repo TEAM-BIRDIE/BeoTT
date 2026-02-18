@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+import bcrypt
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
@@ -98,9 +99,11 @@ def get_primary_account(user_id):
     return result[0] if result else None
 
 def get_user_password(username):
-    query = f"SELECT password FROM members WHERE username = '{username}'"
+    query = f"""
+    SELECT pin_code FROM members WHERE username = '{username}'
+    """
     result = get_data(query)
-    return result[0]["password"] if result else None
+    return result[0]["pin_code"] if result else None
 
 def get_exchange_rate(currency):
     if currency == "KRW":
@@ -154,12 +157,16 @@ def process_transfer(question: str, username: str, context: dict | None = None):
     # 1. 비밀번호 입력 단계
     # --------------------------------------------------
     if context.get("awaiting_password"):
-        stored_password = get_user_password(username)
 
-        if not stored_password:
+        stored_pin = get_user_password(username)  # ✅ 수정
+
+        if not stored_pin:
             return {"status": "ERROR", "message": "사용자 정보를 찾을 수 없습니다."}
 
-        if question != stored_password:
+        if isinstance(stored_pin, str):
+            stored_pin = stored_pin.encode('utf-8')
+                            
+        if bcrypt.checkpw(question.encode('utf-8'), stored_pin) == False:
             context["password_attempts"] = context.get("password_attempts", 0) + 1
 
             if context["password_attempts"] >= 5:
