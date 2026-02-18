@@ -6,19 +6,26 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# 전문가 모듈 임포트
+# ---------------------------------------------------------
+# [Import] 전문가 에이전트 모듈
+# ---------------------------------------------------------
 from rag_agent.sql_agent import get_sql_answer
 from rag_agent.finrag_agent import get_rag_answer
+from rag_agent.transfer_agent import get_transfer_answer
+from rag_agent.web_search_rag import WebSearchRAG  # [NEW] 웹 검색 추가
 
 # 환경 변수 로드
 load_dotenv()
 
 # LLM 설정
-llm = ChatOpenAI(model="gpt-5-mini")
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# [변경] 메모리 대신 직접 관리할 전역 변수 (임시)
-# 주의: 실제 배포 시에는 DB나 Session State로 관리해야 사용자 간 섞이지 않습니다.
+# [전역 설정]
+# 1. 대화 요약 저장소 (메모리 대신 사용)
 GLOBAL_CHAT_CONTEXT = {"summary": ""}
+
+# 2. 웹 검색 에이전트 인스턴스 (재사용을 위해 전역 생성)
+web_rag = WebSearchRAG()
 
 # ---------------------------------------------------------
 # [설정] 프롬프트 경로 설정 및 로딩 함수
@@ -58,8 +65,9 @@ router_prompt = PromptTemplate.from_template(router_template)
 router_chain = router_prompt | llm | StrOutputParser()
 
 # ---------------------------------------------------------
-# [Step 4-C] 일상 대화 (System Prompt) 처리 체인
+# [Step 4-System] 일상 대화 (System Prompt) 처리 체인
 # ---------------------------------------------------------
+# [Fix] 파일명 수정: main_04_system_prompt.md -> main_04_system.md
 system_prompt_template = read_prompt("main_04_system.md")
 system_prompt_chain = PromptTemplate.from_template(system_prompt_template) | llm | StrOutputParser()
 
@@ -91,11 +99,18 @@ def update_summary(current_summary, user_input, ai_output):
         return current_summary
 
 # ---------------------------------------------------------
-# 메인 에이전트 실행 함수
+# 메인 에이전트 실행 함수 (Orchestrator)
 # ---------------------------------------------------------
-def run_fintech_agent(question):
+def run_fintech_agent(question, username="test_user", transfer_context=None, allowed_views=None):
+    """
+    [Params]
+    - question: 사용자 질문
+    - username: 사용자 ID (SQL, 송금 등에서 사용)
+    - transfer_context: 송금 진행 중인 상태 데이터 (있으면 즉시 송금 로직 수행)
+    - allowed_views: SQL 에이전트가 조회 가능한 뷰 목록
+    """
     print(f"\n[User Input]: {question}")
-    
+
     # --- Step 1: 언어 감지 및 한국어 번역 ---
     try:
         trans_result_str = translation_chain.invoke({"question": question}).strip()
@@ -111,8 +126,18 @@ def run_fintech_agent(question):
         source_lang = "Korean"
         korean_query = question
 
+    # ---------------------------------------------------------
+    # [Priority Check] 송금 컨텍스트가 있으면 바로 송금 에이전트로 이동
+    # ---------------------------------------------------------
+    if transfer_context:
+        print("💸 [System] 송금 진행 중... (Context 유지)")
+        return get_transfer_answer(
+            question, # 원본 질문(혹은 번역된 질문)을 넘김
+            username,
+            context=transfer_context
+        )
+
     # --- Step 2: 메모리를 활용한 질문 구체화 (Refinement) ---
-    # [변경] 메모리 객체 대신 전역 변수에서 가져옴
     current_history = GLOBAL_CHAT_CONTEXT["summary"]
     refined_query = korean_query
     
@@ -130,6 +155,7 @@ def run_fintech_agent(question):
 
     # --- Step 3: 의도 파악 (Router) ---
     category = router_chain.invoke({"question": refined_query}).strip()
+    # 특수문자 제거 정제
     category = category.replace("'", "").replace('"', "").replace(".", "")
     print(f"🕵️ [Step 3] 의도 분류: [{category}]")
     
@@ -138,14 +164,25 @@ def run_fintech_agent(question):
     # --- Step 4: 전문가 호출 (Agent Execution) ---
     if category == "DATABASE":
         print("\n=== 🏦 SQL Agent 호출 ===")
-        korean_answer = get_sql_answer(refined_query)
+        korean_answer = get_sql_answer(refined_query, username, allowed_views)
         print("=== 🏦 SQL Agent 종료 ===\n")
         
     elif category == "KNOWLEDGE":
-        print("\n=== 🎓 FinRAG Agent 호출 ===")
+        # [변경] FinRAG가 내부 DB 검색과 웹 검색을 모두 판단하여 처리함
+        print("\n=== 🎓 FinRAG Agent (Hybrid) 호출 ===")
         korean_answer = get_rag_answer(refined_query, original_query=question)
         print("=== 🎓 FinRAG Agent 종료 ===\n")
         
+    elif category == "TRANSFER":
+        print("\n=== 💸 Transfer Agent 호출 ===")
+        transfer_result = get_transfer_answer(refined_query, username, context=None)
+        if isinstance(transfer_result, dict):
+            return transfer_result
+        korean_answer = transfer_result
+        print("=== 💸 Transfer Agent 종료 ===\n")
+
+    # [삭제] WEB_SEARCH 엘리프 블록 제거됨 (KNOWLEDGE로 통합)
+
     elif category == "GENERAL":
         print("\n=== 💬 System Prompt 호출 ===")
         korean_answer = system_prompt_chain.invoke({"question": korean_query})
@@ -155,23 +192,41 @@ def run_fintech_agent(question):
         korean_answer = "죄송해요, 질문의 의도를 정확히 파악하지 못했습니다."
         print(f"❌ [Exception] 처리 불가 카테고리: {category}")
 
-    # --- [NEW] 대화 내용 요약 업데이트 (메모리 저장 대체) ---
-    print("📝 [Memory] 대화 요약 업데이트 중...")
-    updated_summary = update_summary(current_history, refined_query, korean_answer)
-    GLOBAL_CHAT_CONTEXT["summary"] = updated_summary
-    print(f"✅ [Memory Updated]: {updated_summary[:50]}...")
+    # --- [NEW] 대화 내용 요약 업데이트 (송금 진행 중이 아닐 때만) ---
+    if isinstance(korean_answer, str):
+        print("📝 [Memory] 대화 요약 업데이트 중...")
+        updated_summary = update_summary(current_history, refined_query, korean_answer)
+        GLOBAL_CHAT_CONTEXT["summary"] = updated_summary
+        print(f"✅ [Memory Updated]: {updated_summary[:50]}...")
 
     # --- Step 5: 최종 답변 역번역 ---
-    if "Korean" not in source_lang and "한국어" not in source_lang:
+    if isinstance(korean_answer, str) and "Korean" not in source_lang and "한국어" not in source_lang:
         print(f"🔄 [Step 5] 답변 역번역 중...")
         foreign_answer = re_translation_chain.invoke({
             "target_language": source_lang, 
             "korean_answer": korean_answer
         })
-        final_answer = f"""{foreign_answer}\n\n=========================================\n📢 [한국어 번역본 / Demo Translation]\n{korean_answer}\n========================================="""
+        final_answer = f"""
+{foreign_answer}
+
+=========================================
+📢 [한국어 번역본 / Demo Translation]
+{korean_answer}
+=========================================
+"""
     else:
         final_answer = korean_answer
 
-    print(f"🔄 [Step 6] 최종 답변 완료!")
-
     return final_answer
+
+# --- 실행 테스트 ---
+if __name__ == "__main__":
+    while True:
+        q = input("\n질문을 입력하세요 (exit to quit): ")
+        if q.lower() in ["exit", "quit"]:
+            break
+        
+        # 테스트용 호출
+        answer = run_fintech_agent(q, username="user_kr")
+        print(f"\n📢 [Final Answer]: {answer}")
+        print("-" * 50)

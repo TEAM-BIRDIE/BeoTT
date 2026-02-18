@@ -8,6 +8,9 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+# [NEW] 웹 검색 모듈 임포트
+from rag_agent.web_search_rag import WebSearchRAG
+
 # 1. 환경 설정
 load_dotenv()
 
@@ -21,13 +24,16 @@ CHROMA_DB_PATH = PROJECT_ROOT / "data" / "financial_terms"
 COLLECTION_NAME = "financial_terms"
 
 # [설정] 검색 품질을 위한 임계값 (Threshold)
-# 거리(Distance) 기준이므로, 이 값보다 '작아야' 유사한 문서입니다.
-# L2 Distance 기준: 0.5 ~ 0.8 사이 권장 (데이터 분포에 따라 조절 필요)
+# L2 Distance 기준: 0.6보다 크면 관련 없는 문서로 판단
 SIMILARITY_THRESHOLD = 0.6
+
+# [설정] 웹 검색을 강제할 키워드 목록
+WEB_SEARCH_KEYWORDS = ["현재", "최신", "오늘", "주가", "시세", "뉴스", "전망", "날씨", "검색해줘", "얼마야"]
 
 # 전역 변수
 vectorstore = None
-llm = ChatOpenAI(model="gpt-5-mini")
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+web_rag = WebSearchRAG() # 웹 검색 인스턴스 생성
 
 def load_prompt(filename: str) -> str:
     """MD 파일을 읽어서 문자열로 반환하는 함수"""
@@ -48,8 +54,6 @@ def load_knowledge_base():
     try:
         embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
         
-        # [변경] 거리 측정 방식 변경 (cosine -> l2)
-        # 주의: DB를 새로 생성해야 완벽하게 적용됩니다.
         vectorstore = Chroma(
             persist_directory=str(CHROMA_DB_PATH),
             embedding_function=embeddings,
@@ -62,76 +66,104 @@ def load_knowledge_base():
         print(f"❌ ChromaDB 연결 오류: {e}")
         vectorstore = None
 
+def format_web_result(web_result, original_query, translated_query):
+    """웹 검색 결과를 기존 RAG 답변 포맷으로 변환"""
+    citations = [f"- **{src['title']}**: {src['url']}" for src in web_result.get('sources', [])]
+    citation_text = "\n".join(citations) if citations else "- 출처 정보 없음"
+
+    return f"""
+### 🌏 질문 (Question)
+- **Original**: {original_query if original_query else translated_query}
+- **Translated**: {translated_query}
+
+### 🌐 FinBot의 웹 검색 답변 (Real-time)
+{web_result['answer']}
+
+---
+### 📚 참고 웹사이트 (Web Sources)
+{citation_text}
+"""
+
 def get_rag_answer(korean_query, original_query=None):
     if vectorstore is None: load_knowledge_base()
 
-    # 1. 문서 검색 (Score 포함)
+    # ---------------------------------------------------------
+    # [Logic 1] 실시간성/검색 의도 키워드 체크 -> 즉시 웹 검색
+    # ---------------------------------------------------------
+    if any(keyword in korean_query for keyword in WEB_SEARCH_KEYWORDS):
+        print(f"🚀 [FinRAG] 실시간 키워드 감지 -> 웹 검색 전환: '{korean_query}'")
+        web_result = web_rag.web_search(korean_query)
+        return format_web_result(web_result, original_query, korean_query)
+
+    # ---------------------------------------------------------
+    # [Logic 2] ChromaDB 검색 수행
+    # ---------------------------------------------------------
     relevant_docs = []
     if vectorstore:
-        # 넉넉하게 5개를 가져온 뒤 필터링
-        results = vectorstore.similarity_search_with_score(korean_query, k=5)
-        
-        # [추가] Threshold 필터링 로직
-        print(f"🔍 [Search] '{korean_query}' 검색 결과 (Threshold: {SIMILARITY_THRESHOLD})")
-        for doc, score in results:
-            # L2 Distance는 0에 가까울수록 유사함
-            if score <= SIMILARITY_THRESHOLD:
-                relevant_docs.append((doc, score))
-                print(f"   ✅ 채택: {doc.metadata.get('word')} (거리: {score:.4f})")
-            else:
-                print(f"   ❌ 제외: {doc.metadata.get('word')} (거리: {score:.4f} > {SIMILARITY_THRESHOLD})")
-        
-        # 상위 3개만 사용
-        relevant_docs = relevant_docs[:3]
-    
-    # 2. 컨텍스트 및 출처(Citation) 구성
+        try:
+            results = vectorstore.similarity_search_with_score(korean_query, k=5)
+            print(f"🔍 [Search] '{korean_query}' DB 검색 수행")
+            
+            for doc, score in results:
+                # L2 Distance는 0에 가까울수록 유사함 (Threshold 이하만 채택)
+                if score <= SIMILARITY_THRESHOLD:
+                    relevant_docs.append((doc, score))
+                    print(f"   ✅ 채택: {doc.metadata.get('word')} (거리: {score:.4f})")
+                else:
+                    print(f"   ❌ 제외: {doc.metadata.get('word')} (거리: {score:.4f} > {SIMILARITY_THRESHOLD})")
+            
+            # 상위 3개만 사용
+            relevant_docs = relevant_docs[:3]
+        except Exception as e:
+            print(f"⚠️ DB 검색 중 오류: {e}")
+            relevant_docs = []
+
+    # ---------------------------------------------------------
+    # [Logic 3] Fallback: DB에 정보가 없을 경우 -> 웹 검색 자동 전환
+    # ---------------------------------------------------------
+    if not relevant_docs:
+        print(f"⚠️ [FinRAG] 내부 DB에 관련 정보 없음 (유효 문서 0개) -> 웹 검색 자동 전환")
+        web_result = web_rag.web_search(korean_query)
+        return format_web_result(web_result, original_query, korean_query)
+
+    # ---------------------------------------------------------
+    # [Logic 4] DB 기반 답변 생성 (기존 RAG 로직)
+    # ---------------------------------------------------------
     context_text = ""
     citations = []
     
-    if relevant_docs:
-        for doc, score in relevant_docs:
-            # L2 거리일 때는 유사도(%) 표현이 애매하므로 거리값 자체를 표기하거나 생략
-            # 여기서는 편의상 거리(Distance)를 그대로 표시합니다.
-            
-            word = doc.metadata.get("word", "Term")
-            raw_content = doc.page_content
-            
-            definition = raw_content.split(":", 1)[1].strip() if ":" in raw_content else raw_content
-            
-            context_text += f"- **{word}**: {definition}\n"
-            citations.append(f"- **{word}**: {definition[:60]}... (거리: {score:.4f})")
-            
-    else:
-        print("⚠️ [Retrieved Docs]: 유효한 검색 결과 없음 (Threshold 미달)")
-        context_text = "" 
-        citations.append("- 관련된 내부 데이터가 없습니다 (검색 기준 미달).")
+    for doc, score in relevant_docs:
+        word = doc.metadata.get("word", "Term")
+        raw_content = doc.page_content
+        definition = raw_content.split(":", 1)[1].strip() if ":" in raw_content else raw_content
+        
+        context_text += f"- **{word}**: {definition}\n"
+        citations.append(f"- **{word}**: {definition[:60]}... (거리: {score:.4f})")
 
-    # 3. 프롬프트 로딩 및 체인 생성
+    # 프롬프트 로딩 및 체인 생성
     system_template = load_prompt("finrag_01_system.md")
     rag_prompt = PromptTemplate.from_template(system_template)
     rag_chain = rag_prompt | llm | StrOutputParser()
 
-    # 4. LLM 호출
     try:
-        # 검색 결과가 없으면(context_text가 비었으면) 프롬프트에서 Fallback 처리가 되도록 유도
         ai_answer = rag_chain.invoke({
-            "context": context_text if context_text else "검색된 문서가 없습니다.",
+            "context": context_text,
             "question": korean_query
         })
     except Exception as e:
         ai_answer = f"죄송합니다. 답변 생성 중 오류가 발생했습니다. ({e})"
 
-    # 5. 최종 출력 포맷팅
+    # 최종 출력 포맷팅
     final_output = f"""
 ### 🌏 질문 (Question)
 - **Original**: {original_query if original_query else korean_query}
 - **Translated**: {korean_query}
 
-### 💡 FinBot의 답변
+### 💡 FinBot의 답변 (Knowledge Base)
 {ai_answer}
 
 ---
-### 📚 참고 문헌 (References)
+### 📚 내부 참고 문헌 (Internal References)
 {chr(10).join(citations)}
     """
     
@@ -139,5 +171,11 @@ def get_rag_answer(korean_query, original_query=None):
 
 if __name__ == "__main__":
     load_knowledge_base()
-    # 테스트
+    # Test 1: DB에 있는 내용
     print(get_rag_answer("금리가 뭐야?"))
+    print("-" * 50)
+    # Test 2: 실시간 정보 (키워드 트리거)
+    print(get_rag_answer("현재 삼성전자 주가 알려줘"))
+    print("-" * 50)
+    # Test 3: DB에 없는 내용 (Fallback 트리거) -> 예를 들어 엉뚱한 질문
+    print(get_rag_answer("아이유 최신 앨범 뭐야?"))
