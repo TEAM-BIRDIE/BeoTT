@@ -72,15 +72,15 @@ def format_web_result(web_result, original_query, translated_query):
     citation_text = "\n".join(citations) if citations else "- 출처 정보 없음"
 
     return f"""
-### 🌏 질문 (Question)
+### 🌏 질문
 - **Original**: {original_query if original_query else translated_query}
 - **Translated**: {translated_query}
 
-### 🌐 FinBot의 웹 검색 답변 (Real-time)
+### 🌐 FinBot의 웹 검색 답변
 {web_result['answer']}
 
 ---
-### 📚 참고 웹사이트 (Web Sources)
+### 📚 참고 웹사이트
 {citation_text}
 """
 
@@ -155,15 +155,15 @@ def get_rag_answer(korean_query, original_query=None):
 
     # 최종 출력 포맷팅
     final_output = f"""
-### 🌏 질문 (Question)
+### 🌏 질문
 - **Original**: {original_query if original_query else korean_query}
 - **Translated**: {korean_query}
 
-### 💡 FinBot의 답변 (Knowledge Base)
+### 💡 FinBot의 답변
 {ai_answer}
 
 ---
-### 📚 내부 참고 문헌 (Internal References)
+### 📚 내부 참고 문헌
 {chr(10).join(citations)}
     """
     
