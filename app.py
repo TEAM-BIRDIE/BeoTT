@@ -90,7 +90,6 @@ if 'user_name_real' not in st.session_state:
     st.session_state['user_name_real'] = None
 if 'page' not in st.session_state:
     st.session_state['page'] = 'login'
-
 if 'allowed_views' not in st.session_state:
     st.session_state['allowed_views'] = []
 
