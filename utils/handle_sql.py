@@ -23,6 +23,7 @@ POOL = PooledDB(
 def _get_connection():
     # [수정] 풀에서 연결을 빌려옴 (매우 빠름)
     return POOL.connection()
+
 def get_data(query, args=None):
     """SELECT 전용: 결과를 반환함"""
     conn = _get_connection()

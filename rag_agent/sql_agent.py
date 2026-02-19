@@ -83,7 +83,7 @@ def clean_sql_query(text: str) -> str:
                 break
     return text.strip()
 
-def run_db_query(query, username):
+def run_db_query(query):
     try:
         if not query:
             return "생성된 쿼리가 없습니다."
@@ -126,7 +126,7 @@ def node_sql_gen(state: SQLAgentState) -> dict:
     return {"query": query}
 
 def node_execute(state: SQLAgentState) -> dict:
-    result = run_db_query(state["query"], state["username"])
+    result = run_db_query(state["query"])
     return {"result": result}
 
 def node_answer(state: SQLAgentState) -> dict:
