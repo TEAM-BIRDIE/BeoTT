@@ -18,6 +18,18 @@ from utils.handle_sql import get_data, execute_query
 # 1. 환경 설정
 load_dotenv()
 llm = ChatOpenAI(model="gpt-5-mini")
+CURRENT_DIR = Path(__file__).resolve().parent
+PROMPT_DIR = CURRENT_DIR / "prompt" / "transfer"
+
+def read_prompt(filename: str) -> str:
+    file_path = PROMPT_DIR / filename
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
+        return ""
 
 # ---------------------------------------------------------
 # [NEW] 로그 출력 유틸리티 함수
@@ -71,30 +83,7 @@ def _node_extract(state: TransferExtractState) -> dict:
     t0 = print_log("1. LLM 송금 정보 추출 (node_extract)", "start")
     
     # 한국어 금액 단위 처리 및 JSON 강제 프롬프트
-    template = """
-    You are a banking AI assistant. Extract transfer details from the user's input.
-    
-    # Extraction Rules
-    1. **target**: Who receives the money? (Name or Relationship)
-    2. **amount**: Convert Korean currency units to **Integer**. 반올림 하지 마.
-       - '만 원', '만원' -> 10000
-       - '천 원' -> 1000
-       - '10만 원' -> 100000
-    3. **currency**: Currency code (KRW, USD, etc). Default is "KRW".
-       - "동" -> VND
-       - "달러" -> USD
-       
-    # Output Format
-    Return ONLY a JSON object. Do not add any markdown formatting.
-    {{
-        "target": "string or null",
-        "amount": int or null,
-        "currency": "string or null"
-    }}
-    
-    # User Input
-    {question}
-    """
+    template = read_prompt("transfer_01_extract.md")
     
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
@@ -142,19 +131,7 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         for c in contacts
     ])
 
-    template = """
-    Find the best matching 'Name' from the Candidate List for the User Input.
-    Consider synonyms and relationships (e.g., Mom=Mother, Dad=Father, Boss=Manager).
-    
-    User Input: {user_input}
-    
-    Candidate List:
-    {candidates}
-    
-    Task:
-    1. If there is a clear match, return ONLY the exact 'Name'.
-    2. If no reasonable match exists, return "NONE".
-    """
+    template = read_prompt("transfer_02_contact_match.md")
     
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
