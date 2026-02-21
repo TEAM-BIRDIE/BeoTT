@@ -594,7 +594,7 @@ def chat_page():
             streamed_text = ""
             for char in final_response:
                 streamed_text += char
-                time.sleep(0.01)
+                time.sleep(0.005)
                 message_placeholder.markdown(streamed_text + "▌")
 
             message_placeholder.markdown(streamed_text)
