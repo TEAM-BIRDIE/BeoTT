@@ -59,12 +59,18 @@ def local_css():
         div.stButton > button {
             background: #FFFFFF; color: #64748B !important; border: 1px solid #CBD5E1 !important;
             padding: 0.5rem 1rem !important; width: 100%;
+            width: auto !important;
         }
         div.stButton > button:hover {
             background: #FFFFFF !important; color: #64748B !important;
             transform: translateY(-2px); box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.4);
         }
-        button[kind="secondary"] { background: #FFFFFF; border: 1px solid #CBD5E1 !important; color: #64748B !important; }  
+        button[kind="secondary"] { 
+            background: #FFFFFF; 
+            border: 1px solid #CBD5E1 !important; 
+            color: #64748B !important; 
+            width: auto !important;
+        }  
                 
         /* 메시지 버블 스타일 */
         [data-testid="stChatMessage"][data-message-author="user"] {
