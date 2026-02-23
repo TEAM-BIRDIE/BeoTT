@@ -1,51 +1,22 @@
 import os
-import time
 from datetime import datetime
-from pathlib import Path
 from typing import TypedDict
 from dotenv import load_dotenv
 from tavily import TavilyClient
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
+from utils.agent_utils import read_prompt, print_log
+
 load_dotenv()
-
-llm = ChatOpenAI(model="gpt-5-mini")
-
-def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    
-    if status == "start":
-        print(f"[{now}] [{step_name}] 시작...", flush=True) 
-        return time.time()
-        
-    elif status == "end" and start_time is not None:
-        elapsed = time.time() - start_time
-        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
-        if extra_info:
-            log_msg += f"\n   {extra_info}"
-        
-        print(log_msg, flush=True) 
-        return elapsed
-
-# ---------------------------------------------------------
-# 프롬프트
-# ---------------------------------------------------------
 CURRENT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = CURRENT_DIR / "prompt" / "web_search"
 
-def read_prompt(filename: str) -> str:
-    file_path = PROMPT_DIR / filename
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
-        return ""
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
 # 웹 검색 상태
@@ -61,7 +32,7 @@ class WebSearchState(TypedDict, total=False):
 # ---------------------------------------------------------
 def node_answer(state: WebSearchState) -> dict:
     t0 = print_log("Web Search: LLM 기반 최종 답변 생성 (node_answer)", "start")
-    template = read_prompt("web_search_01_response.md")
+    template = read_prompt(PROMPT_DIR, "web_search_01_response.md")
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
     answer = chain.invoke({"question": state["question"], "context": state.get("context", "")})
@@ -145,7 +116,23 @@ class WebSearchRAG:
                 "sources": [],
                 "source_type": "Error",
             }
+            
+    def format_web_result(self, web_result, original_query, translated_query):
+            citations = [f"- **{src['title']}**: {src['url']}" for src in web_result.get("sources", [])]
+            citation_text = "\n".join(citations) if citations else "- 출처 정보 없음"
+            return f"""
+### 🌏 질문
+- **Original**: {original_query if original_query else translated_query}
+- **Translated**: {translated_query}
 
+### 🌐 FinBot의 웹 검색 답변
+{web_result['answer']}
+
+---
+### 📚 참고 웹사이트
+{citation_text}
+"""
+        
 if __name__ == "__main__":
     rag = WebSearchRAG()
     q = "현재 삼성전자 주가는?"

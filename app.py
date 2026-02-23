@@ -6,8 +6,10 @@ import os
 import sys
 import subprocess
 
-from utils.handle_sql import get_data, execute_query
-from rag_agent.main_agent import run_fintech_agent, reset_global_context
+from utils.handle_sql import get_data, execute_query, create_user_views
+from utils.agent_utils import reset_global_context
+
+from rag_agent.main_agent import run_fintech_agent
 from rag_agent.knowledge_agent import load_knowledge_base
 
 load_dotenv()
@@ -15,7 +17,7 @@ load_dotenv()
 # ==========================================
 # 1. 페이지 설정 및 디자인
 # ==========================================
-st.set_page_config(page_title="BeoTT Buddy", page_icon="img/버디_기본.png", layout="centered")
+st.set_page_config(page_title="BeoTT", page_icon="img/버디_확대.png", layout="centered")
 
 def local_css():
     # ==========================================
@@ -210,7 +212,7 @@ def login_page():
             with col_img_2:
                 st.image("img/벗_로고.png")
 
-            username = st.text_input("아이디 (ID)", placeholder="example@woorifis.com")
+            username = st.text_input("아이디 (ID)", placeholder="woorifisa6")
             password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
             
             st.markdown("####") 
@@ -244,7 +246,6 @@ def login_page():
                                 st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
                                 st.session_state["transfer_context"] = None
                                 
-                                from utils.create_view import create_user_views
                                 view_names = create_user_views(username)
                                 st.session_state['allowed_views'] = view_names
 
@@ -355,11 +356,11 @@ def chat_page():
             st.session_state["last_result"] = None
             st.rerun()
 
-    st.caption("🔒 BeoTT Service | Powered by Buddy-Agent")
+    st.caption("🔒 BeoTT Service | Powered by BIRDIE-Agent")
 
     for message in st.session_state['messages']:
         if message["role"] == "assistant":
-            with st.chat_message(message["role"], avatar="img/버디_기본.png"):
+            with st.chat_message(message["role"], avatar="img/버디_확대.png"):
                 st.markdown(message["content"])
         else:
             with st.chat_message(message["role"], avatar="👤"):

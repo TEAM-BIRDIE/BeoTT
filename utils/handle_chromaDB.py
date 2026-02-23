@@ -1,12 +1,13 @@
 import os
+from datetime import datetime
 import chromadb
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
-try:
-    from utils.handle_sql import get_data
-except ImportError:
-    from handle_sql import get_data
+from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
 
+from utils.handle_sql import get_data
+from utils.agent_utils import print_log
 # .env 로드
 load_dotenv()
 
@@ -20,6 +21,7 @@ PERSIST_DIRECTORY = os.path.normpath(PERSIST_DIRECTORY)
 
 print(f"📍 확정된 저장 경로: {PERSIST_DIRECTORY}") # 확인용 출력
 
+vectorstore = None
 COLLECTION_NAME = "financial_terms"
 BATCH_SIZE = 100
 
@@ -86,6 +88,31 @@ def sync_mysql_to_chroma():
 
     except Exception as e:
         print(f"오류 발생: {e}")
+
+def load_knowledge_base():
+    """ChromaDB 연결 설정"""
+    global vectorstore
+    
+    if vectorstore is not None:
+        return
+    CHROMA_DB_PATH = "data/financial_terms"
+    COLLECTION_NAME = "financial_terms"
+    
+    t0 = print_log("RAG ChromaDB 연결", "start")
+    try:
+        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+        vectorstore = Chroma(
+            persist_directory=str(CHROMA_DB_PATH),
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME,
+            collection_metadata={"hnsw:space": "l2"},
+        )
+        print_log("RAG ChromaDB 연결", "end", t0, extra_info=f"Metric: L2, 경로: {CHROMA_DB_PATH}")
+    except Exception as e:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ❌ ChromaDB 연결 오류: {e}")
+        vectorstore = None
+
 
 if __name__ == "__main__":
     sync_mysql_to_chroma()

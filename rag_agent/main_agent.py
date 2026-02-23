@@ -1,69 +1,27 @@
-import os
 import json
-import time
 from datetime import datetime
-from pathlib import Path
 from typing import TypedDict, Literal
 from dotenv import load_dotenv
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
+from utils.agent_utils import read_prompt, print_log
+
 from rag_agent.account_agent import get_sql_answer
 from rag_agent.knowledge_agent import get_rag_answer
 from rag_agent.transfer_agent import get_transfer_answer
-from rag_agent.websearch_agent import WebSearchRAG
 
 load_dotenv()
-
-llm = ChatOpenAI(model="gpt-5-mini")
-
-
 CURRENT_DIR = Path(__file__).resolve().parent
+PROMPT_DIR = CURRENT_DIR / "prompt" / "main"
 MEMORY_DIR = CURRENT_DIR.parent / "logs"
 MEMORY_FILE = MEMORY_DIR / "memory.md"
 
-# ---------------------------------------------------------
-# 로그 출력
-# ---------------------------------------------------------
-def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if status == "start":
-        print(f"[{now}] [{step_name}] 시작...",flush=True)
-        return time.time()
-    elif status == "end" and start_time is not None:
-        elapsed = time.time() - start_time
-        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
-        if extra_info:
-            log_msg += f"\n   {extra_info}"
-        print(log_msg,flush=True)
-        return elapsed
-
-def reset_global_context():
-    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-        f.write("# 대화 기록\n\n")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    print(f"[{now}] [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
-
-web_rag = WebSearchRAG()
-
-# ---------------------------------------------------------
-# 프롬프트 경로 설정 및 로딩 함수
-# ---------------------------------------------------------
-PROMPT_DIR = CURRENT_DIR / "prompt" / "main"
-
-def read_prompt(filename: str) -> str:
-    file_path = PROMPT_DIR / filename
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
-        return ""
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
 # 상태 스키마
@@ -88,23 +46,23 @@ class MainAgentState(TypedDict, total=False):
 # 프롬프트/체인 빌더
 # ---------------------------------------------------------
 def _translation_chain():
-    t = read_prompt("main_01_translation.md")
+    t = read_prompt(PROMPT_DIR, "main_01_translation.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
 def _refinement_chain():
-    t = read_prompt("main_02_refinement.md")
+    t = read_prompt(PROMPT_DIR, "main_02_refinement.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
 def _router_chain():
-    t = read_prompt("main_03_router.md")
+    t = read_prompt(PROMPT_DIR, "main_03_router.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
 def _system_prompt_chain():
-    t = read_prompt("main_04_system.md")
+    t = read_prompt(PROMPT_DIR, "main_04_system.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
 def _re_translation_chain():
-    t = read_prompt("main_05_re_translation.md")
+    t = read_prompt(PROMPT_DIR, "main_05_re_translation.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
 # ---------------------------------------------------------
