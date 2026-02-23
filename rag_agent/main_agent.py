@@ -46,7 +46,7 @@ def reset_global_context():
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         f.write("# 대화 기록\n\n")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    print(f"[{now}] 🧹 [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
+    print(f"[{now}] [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
 
 web_rag = WebSearchRAG()
 
@@ -62,7 +62,7 @@ def read_prompt(filename: str) -> str:
             return f.read()
     except FileNotFoundError:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
+        print(f"[{now}] [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
         return ""
 
 # ---------------------------------------------------------
