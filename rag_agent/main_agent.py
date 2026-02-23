@@ -188,13 +188,13 @@ def node_route(state: MainAgentState) -> dict:
     print_log("Step 3: 의도 분류 및 라우팅 (node_route)", "end", t0, extra_info=f"분류된 카테고리: [{category}]")
     return {"category": category}
 
-def node_sql(state: MainAgentState) -> dict:
+def node_account(state: MainAgentState) -> dict:
     t0 = print_log("Sub-Agent: SQL Agent 호출", "start")
     answer = get_sql_answer(state["refined_query"], state["username"], state.get("allowed_views") or [])
     print_log("Sub-Agent: SQL Agent 호출", "end", t0)
     return {"korean_answer": answer}
 
-def node_finrag(state: MainAgentState) -> dict:
+def node_knowledge(state: MainAgentState) -> dict:
     t0 = print_log("Sub-Agent: FinRAG Agent 호출", "start")
     answer = get_rag_answer(state["refined_query"], original_query=state["question"])
     print_log("Sub-Agent: FinRAG Agent 호출", "end", t0)
@@ -290,8 +290,8 @@ def _build_main_graph():
     builder.add_node("translate", node_translate)
     builder.add_node("refine", node_refine)
     builder.add_node("route", node_route)
-    builder.add_node("sql", node_sql)
-    builder.add_node("finrag", node_finrag)
+    builder.add_node("sql", node_account)
+    builder.add_node("finrag", node_knowledge)
     builder.add_node("transfer", node_transfer)
     builder.add_node("system", node_system)
     builder.add_node("fallback", node_fallback)
