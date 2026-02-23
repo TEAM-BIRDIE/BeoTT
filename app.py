@@ -8,7 +8,7 @@ import subprocess
 
 from utils.handle_sql import get_data, execute_query
 from rag_agent.main_agent import run_fintech_agent, reset_global_context
-from rag_agent.finrag_agent import load_knowledge_base
+from rag_agent.knowledge_agent import load_knowledge_base
 
 load_dotenv()
 
@@ -198,7 +198,6 @@ if "last_result" not in st.session_state:
 # ==========================================
 # 3. 페이지 함수
 # ==========================================
-
 def login_page():
     st.write("")
     
@@ -325,12 +324,10 @@ def register_page():
 
 def chat_page():
     with st.sidebar:
-        # 1. 프로필 카드 컨테이너 (st.container 사용)
         with st.container(border=True, key="profile-card"):
             st.markdown("<span id='profile-card-marker' style='display:none' aria-hidden='true'></span>", unsafe_allow_html=True)
             st.markdown("<h3 style='margin: 0 0 10px 0; color: #1E293B; font-size: 1.3rem; font-weight: 700;'>👋 반가워요!</h3>", unsafe_allow_html=True)
             
-            # 이름(6)과 로그아웃 버튼(4)의 비율로 배치
             col_name, col_logout = st.columns([6, 4])
             with col_name:
                 user_name = st.session_state.get('user_name_real', '사용자')
@@ -352,7 +349,6 @@ def chat_page():
                     st.session_state['page'] = 'login'
                     st.rerun()
 
-        # 2. 새 대화 시작 버튼
         if st.button("✨ 새 대화 시작", use_container_width=True):
             st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
             st.session_state["transfer_context"] = None
@@ -361,17 +357,14 @@ def chat_page():
 
     st.caption("🔒 BeoTT Service | Powered by Buddy-Agent")
 
-    # 1. 기존 메시지 렌더링 (아바타 로직 추가)
     for message in st.session_state['messages']:
         if message["role"] == "assistant":
             with st.chat_message(message["role"], avatar="img/버디_기본.png"):
                 st.markdown(message["content"])
         else:
-            # 사용자 아바타 추가 (이모지 또는 기본 아이콘)
             with st.chat_message(message["role"], avatar="👤"):
                 st.markdown(message["content"])
 
-    # 2. 확인 버튼 렌더링
     if (
         st.session_state.get("last_result") and
         st.session_state["last_result"].get("ui_type") == "confirm_buttons"
@@ -408,16 +401,13 @@ def chat_page():
             if st.button("❌ 취소", key="confirm_no", use_container_width=True):
                 handle_confirm("__NO__")
 
-    # 3. 사용자 입력 처리
     if user_input := st.chat_input("메시지를 입력해 주세요..."):
         st.session_state['messages'].append({"role": "user", "content": user_input})
         with st.chat_message("user", avatar="👤"):
             st.markdown(user_input)
 
-        # [요구사항 반영] 1단계: '생각 중' 상태를 보여줄 임시 컨테이너 생성
         thinking_placeholder = st.empty()
         
-        # [요구사항 반영] 2단계: 임시 컨테이너에 '생각' 아바타 적용
         with thinking_placeholder.chat_message("assistant", avatar="img/버디_생각.png"):
             with st.spinner("버디가 답변을 생성하고 있어요..."):
                 try:
@@ -449,14 +439,11 @@ def chat_page():
                     final_response = f"미안해요, 오류가 발생했어요: {e}"
                     st.session_state["last_result"] = None
 
-        # [요구사항 반영] 3단계: 답변 생성이 완료되면 '생각 중' 임시 컨테이너 완전히 삭제
         thinking_placeholder.empty()
 
-        # [요구사항 반영] 4단계: '기본' 아바타로 최종 결과 출력 블록 렌더링
         with st.chat_message("assistant", avatar="img/버디_답변.png"):
             message_placeholder = st.empty()
             
-            # 스트리밍 효과
             streamed_text = ""
             for char in final_response:
                 streamed_text += char
@@ -473,7 +460,6 @@ def chat_page():
 # ==========================================
 # 4. 실행 로직
 # ==========================================
-
 if st.session_state['logged_in']:
     chat_page()
 else:

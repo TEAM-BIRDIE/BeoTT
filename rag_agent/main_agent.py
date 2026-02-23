@@ -10,18 +10,14 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
-# ---------------------------------------------------------
-# [Import] 전문가 에이전트 모듈
-# ---------------------------------------------------------
-from rag_agent.sql_agent import get_sql_answer
-from rag_agent.finrag_agent import get_rag_answer
-from rag_agent.transfer_agent import get_transfer_answer
-from rag_agent.web_search_rag import WebSearchRAG
 
-# 환경 변수 로드
+from rag_agent.account_agent import get_sql_answer
+from rag_agent.knowledge_agent import get_rag_answer
+from rag_agent.transfer_agent import get_transfer_answer
+from rag_agent.websearch_agent import WebSearchRAG
+
 load_dotenv()
 
-# LLM 설정
 llm = ChatOpenAI(model="gpt-5-mini")
 
 
@@ -30,18 +26,18 @@ MEMORY_DIR = CURRENT_DIR.parent / "logs"
 MEMORY_FILE = MEMORY_DIR / "memory.md"
 
 # ---------------------------------------------------------
-# [로그 출력 유틸리티 함수]
+# 로그 출력
 # ---------------------------------------------------------
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     if status == "start":
-        print(f"[{now}] ⏳ [{step_name}] 시작...",flush=True)
+        print(f"[{now}] [{step_name}] 시작...",flush=True)
         return time.time()
     elif status == "end" and start_time is not None:
         elapsed = time.time() - start_time
-        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
-            log_msg += f"\n   👉 {extra_info}"
+            log_msg += f"\n   {extra_info}"
         print(log_msg,flush=True)
         return elapsed
 
@@ -55,7 +51,7 @@ def reset_global_context():
 web_rag = WebSearchRAG()
 
 # ---------------------------------------------------------
-# [설정] 프롬프트 경로 설정 및 로딩 함수
+# 프롬프트 경로 설정 및 로딩 함수
 # ---------------------------------------------------------
 PROMPT_DIR = CURRENT_DIR / "prompt" / "main"
 
@@ -70,13 +66,13 @@ def read_prompt(filename: str) -> str:
         return ""
 
 # ---------------------------------------------------------
-# [LangGraph] 상태 스키마
+# 상태 스키마
 # ---------------------------------------------------------
 class MainAgentState(TypedDict, total=False):
     question: str
     korean_query: str
     source_lang: str
-    needs_context: bool       # [NEW] 문맥 보정 필요 여부 플래그
+    needs_context: bool
     refined_query: str
     category: str
     korean_answer: str
@@ -89,7 +85,7 @@ class MainAgentState(TypedDict, total=False):
     _skip_re_translate: bool
 
 # ---------------------------------------------------------
-# [LangGraph] 프롬프트/체인 빌더
+# 프롬프트/체인 빌더
 # ---------------------------------------------------------
 def _translation_chain():
     t = read_prompt("main_01_translation.md")
@@ -132,11 +128,11 @@ def translate_answer(korean_text: str, target_language: str) -> str:
         return translated
     except Exception as e:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ⚠️ 역번역 실패: {e}, 원본 반환")
+        print(f"[{now}] 역번역 실패: {e}, 원본 반환")
         return korean_text
 
 # ---------------------------------------------------------
-# [LangGraph] 노드 함수
+# 노드 함수
 # ---------------------------------------------------------
 def node_translate(state: MainAgentState) -> dict:
     t0 = print_log("Step 1: 입력 언어 감지 및 한국어 번역 (node_translate)", "start")
@@ -149,19 +145,17 @@ def node_translate(state: MainAgentState) -> dict:
         
         source_lang = trans_result.get("source_language", "Korean")
         korean_query = trans_result.get("korean_query", question)
-        # [NEW] JSON에서 needs_context 파싱 (기본값 True로 설정하여 안전하게 폴백)
         needs_context = trans_result.get("needs_context", True)
         
         extra = f"감지 언어: {source_lang} / 변환 쿼리: '{korean_query}' / 보정 필요: {needs_context}"
     except Exception as e:
         source_lang = "Korean"
         korean_query = question
-        needs_context = True # 파싱 에러 시 무조건 보정 단계를 거치도록 안전장치 설정
+        needs_context = True
         extra = f"번역 오류로 원본 유지: {e}"
         
     print_log("Step 1: 입력 언어 감지 및 한국어 번역 (node_translate)", "end", t0, extra_info=extra)
     
-    # [NEW] 보정 단계(refine)를 건너뛸 수 있으므로 refined_query를 미리 korean_query로 설정
     return {
         "korean_query": korean_query, 
         "source_lang": source_lang, 
@@ -188,7 +182,6 @@ def node_refine(state: MainAgentState) -> dict:
 def node_route(state: MainAgentState) -> dict:
     t0 = print_log("Step 3: 의도 분류 및 라우팅 (node_route)", "start")
     chain = _router_chain()
-    # 만약 보정 노드를 거치지 않았더라도 node_translate에서 넣은 refined_query(기본 원문)가 사용됨
     category = chain.invoke({"question": state["refined_query"]}).strip()
     category = category.replace("'", "").replace('"', "").replace(".", "")
     
@@ -266,7 +259,7 @@ def node_re_translate(state: MainAgentState) -> dict:
 # 라우터 함수들
 # ---------------------------------------------------------
 def check_needs_context(state: MainAgentState) -> Literal["refine", "route"]:
-    """[NEW] 번역 노드에서 판단한 needs_context 값에 따라 보정 노드를 거칠지 결정"""
+    """번역 노드에서 판단한 needs_context 값에 따라 보정 노드를 거칠지 결정"""
     if state.get("needs_context", True):
         return "refine"
     return "route"
@@ -289,7 +282,7 @@ def after_transfer(state: MainAgentState) -> Literal["summarize", "end_transfer"
     return "summarize"
 
 # ---------------------------------------------------------
-# [LangGraph] 그래프 빌드 및 컴파일
+# 그래프 빌드 및 컴파일
 # ---------------------------------------------------------
 def _build_main_graph():
     builder = StateGraph(MainAgentState)
@@ -307,7 +300,6 @@ def _build_main_graph():
 
     builder.add_edge(START, "translate")
     
-    # [NEW] 기존의 무조건 연결 대신 조건부 연결(Conditional Edge) 적용
     builder.add_conditional_edges(
         "translate",
         check_needs_context,

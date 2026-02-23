@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from handle_sql import execute_query, execute_many
 
-print("🚀 [최종] 금융 용어 PDF -> MySQL DB 적재 시작 (Strict Match Mode)...")
+print("[최종] 금융 용어 PDF -> MySQL DB 적재 시작 (Strict Match Mode)...")
 
 # 1. 환경변수 로드
 load_dotenv()
@@ -25,7 +25,6 @@ BODY_START_PAGE = 17
 def init_db_table():
     try:
         print("⚙️ DB 테이블(terms) 초기화 중...")
-        # [변경] execute_query를 사용하여 DDL 실행
         execute_query("DROP TABLE IF EXISTS terms")
         
         create_sql = """
@@ -37,9 +36,9 @@ def init_db_table():
         );
         """
         execute_query(create_sql)
-        print("✅ DB 테이블(terms) 초기화 완료.")
+        print("DB 테이블(terms) 초기화 완료.")
     except Exception as e:
-        print(f"❌ DB 초기화 오류: {e}")
+        print(f"DB 초기화 오류: {e}")
         exit()
 
 # 4. 정규화 함수 (비교용: 공백/특수문자 제거)
@@ -49,7 +48,7 @@ def normalize(text):
 
 # 5. [1단계] 목차 정밀 추출 (노이즈 제거 + 합치기)
 def extract_master_terms():
-    print("📖 [1단계] 목차 정밀 추출 중...")
+    print("[1단계] 목차 정밀 추출 중...")
     term_list = []
     
     index_pattern = re.compile(r'^(?P<term>.*?)\s*[･・\.]+\s*\d+$')
@@ -94,18 +93,17 @@ def extract_master_terms():
                             prev_line = clean_line
 
     unique_terms = list(dict.fromkeys(term_list))
-    print(f"✅ 목차 추출 완료: {len(unique_terms)}개 용어 기준 확보.")
+    print(f"목차 추출 완료: {len(unique_terms)}개 용어 기준 확보.")
     return unique_terms
 
 # 6. [2단계] 본문 파싱 및 DB 적재
 def parse_and_insert_db():
-    # DB 초기화
     init_db_table()
     
     master_terms = extract_master_terms()
     normalized_master_set = set(normalize(t) for t in master_terms)
     
-    print(f"📂 [2단계] 본문 분석 및 DB 적재 시작 (엄격한 일치)...")
+    print(f"[2단계] 본문 분석 및 DB 적재 시작 (엄격한 일치)...")
     
     data_list = [] 
     
@@ -136,7 +134,6 @@ def parse_and_insert_db():
 
                 if is_title:
                     if current_title and current_body:
-                        # 튜플 형태로 저장 (execute_many 사용을 위해)
                         data_list.append((current_title, current_body.strip()))
                     
                     current_title = clean_line
@@ -151,19 +148,18 @@ def parse_and_insert_db():
         if current_title and current_body:
             data_list.append((current_title, current_body.strip()))
 
-    # DB에 일괄 저장 (Bulk Insert)
+    # DB에 일괄 저장
     if data_list:
-        print(f"💾 총 {len(data_list)}개 데이터를 DB에 저장합니다...")
+        print(f"총 {len(data_list)}개 데이터를 DB에 저장합니다...")
         
-        # [변경] execute_many를 사용하여 대량 삽입
         insert_sql = "INSERT INTO terms (word, definition) VALUES (%s, %s)"
         try:
             count = execute_many(insert_sql, data_list)
-            print(f"🎉 성공적으로 {count}개의 데이터가 DB에 적재되었습니다.")
+            print(f"성공적으로 {count}개의 데이터가 DB에 적재되었습니다.")
         except Exception as e:
-            print(f"❌ 데이터 적재 중 오류 발생: {e}")
+            print(f"데이터 적재 중 오류 발생: {e}")
     else:
-        print("⚠️ 저장할 데이터가 없습니다.")
+        print("저장할 데이터가 없습니다.")
 
 if __name__ == "__main__":
     parse_and_insert_db()

@@ -13,24 +13,21 @@ from langgraph.graph import StateGraph, START, END
 
 load_dotenv()
 
-# LLM 설정 (일관성을 위해 ChatOpenAI 사용)
 llm = ChatOpenAI(model="gpt-5-mini")
 
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     
     if status == "start":
-        # flush=True 추가
-        print(f"[{now}] ⏳ [{step_name}] 시작...", flush=True) 
+        print(f"[{now}] [{step_name}] 시작...", flush=True) 
         return time.time()
         
     elif status == "end" and start_time is not None:
         elapsed = time.time() - start_time
-        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
-            log_msg += f"\n   👉 {extra_info}"
+            log_msg += f"\n   {extra_info}"
         
-        # flush=True 추가
         print(log_msg, flush=True) 
         return elapsed
 
@@ -51,7 +48,7 @@ def read_prompt(filename: str) -> str:
         return ""
 
 # ---------------------------------------------------------
-# [LangGraph] 웹 검색 상태
+# 웹 검색 상태
 # ---------------------------------------------------------
 class WebSearchState(TypedDict, total=False):
     question: str
@@ -60,7 +57,7 @@ class WebSearchState(TypedDict, total=False):
     answer: str
 
 # ---------------------------------------------------------
-# [LangGraph] 노드
+# 노드
 # ---------------------------------------------------------
 def node_answer(state: WebSearchState) -> dict:
     t0 = print_log("Web Search: LLM 기반 최종 답변 생성 (node_answer)", "start")
@@ -89,7 +86,7 @@ def _get_web_search_graph():
     return _web_search_graph
 
 # ---------------------------------------------------------
-# WebSearchRAG 클래스 (LangGraph 사용)
+# WebSearchRAG 클래스
 # ---------------------------------------------------------
 class WebSearchRAG:
     def __init__(self):
@@ -141,7 +138,7 @@ class WebSearchRAG:
             }
         except Exception as e:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{now}] ❌ [Web Search Error]: {e}")
+            print(f"[{now}] [Web Search Error]: {e}")
             print("-" * 50 + "\n")
             return {
                 "answer": "죄송합니다. 웹 검색 중 오류가 발생했습니다.",
@@ -149,7 +146,6 @@ class WebSearchRAG:
                 "source_type": "Error",
             }
 
-# --- 테스트 코드 ---
 if __name__ == "__main__":
     rag = WebSearchRAG()
     q = "현재 삼성전자 주가는?"

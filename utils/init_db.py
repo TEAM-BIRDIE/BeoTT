@@ -4,7 +4,6 @@ import bcrypt
 import csv
 from dotenv import load_dotenv
 
-# .env 파일 로드
 load_dotenv()
 
 def get_connection():
@@ -21,7 +20,6 @@ def insert_from_csv(cursor, table_name, csv_file):
     """CSV 파일을 읽어서 테이블에 자동으로 INSERT 하는 함수"""
     print(f"📄 {csv_file} 읽어서 {table_name} 테이블에 데이터 적재 중...")
     
-    # utf-8-sig로 읽어서 만약 있을 수 있는 BOM 문자를 제거합니다.
     with open(csv_file, 'r', encoding='utf-8-sig') as f:
         reader = csv.reader(f)
         headers = next(reader) # 첫 줄은 컬럼명
@@ -40,20 +38,20 @@ def init_database():
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            print("🔧 데이터베이스 초기화 시작...")
+            print("데이터베이스 초기화 시작...")
 
             # 1. 외래키 체크 해제 (삭제/생성 시 오류 방지)
             cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
 
             # 2. 기존 테이블 삭제 (종속성 역순으로 삭제)
-            print("🗑️ 기존 테이블 삭제 중...")
+            print("기존 테이블 삭제 중...")
             cursor.execute("DROP TABLE IF EXISTS ledger")
             cursor.execute("DROP TABLE IF EXISTS contacts")
             cursor.execute("DROP TABLE IF EXISTS accounts")
             cursor.execute("DROP TABLE IF EXISTS members")
 
             # 3. 테이블 새로 생성 
-            print("✨ 테이블 생성 중...")
+            print("테이블 생성 중...")
             
             # [members 테이블]
             cursor.execute("""
@@ -123,7 +121,7 @@ def init_database():
             # 4. 외래키 체크 다시 활성화
             cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
 
-            # 5. Members 더미 데이터 준비 (하드코딩된 원본 유지)
+            # 5. Members 더미 데이터 준비
             dummy_users = [
                 {
                     "username": "user_kr",
@@ -167,13 +165,13 @@ def init_database():
                 ))
 
             # 6. CSV 파일을 이용한 더미 데이터 적재 (의존성 순서대로 accounts -> contacts -> ledger)
-            print("🚀 CSV 기반 나머지 더미 데이터 적재 시작...")
+            print("CSV 기반 나머지 더미 데이터 적재 시작...")
             # 현재 실행 중인 init_db.py 파일의 위치(utils)를 기준으로 부모 디렉토리의 data 폴더 경로 계산
             base_dir = os.path.dirname(os.path.abspath(__file__))
             data_dir = os.path.join(base_dir, '..', 'data')
 
             # 경로 확인용 출력 (생략 가능)
-            print(f"📁 데이터 폴더 경로: {data_dir}")
+            print(f"데이터 폴더 경로: {data_dir}")
 
             # os.path.join을 사용하여 OS에 맞는 안전한 절대 경로 생성
             insert_from_csv(cursor, 'accounts', os.path.join(data_dir, 'accounts_data.csv'))
@@ -182,15 +180,15 @@ def init_database():
             
             # 7. 변경사항 확정
             conn.commit()
-            print("✅ DB 초기화 및 더미 데이터 생성 완료!")
+            print("DB 초기화 및 더미 데이터 생성 완료!")
             print("-------------------------------------------------")
-            print("👉 테스트 계정 정보 (모든 계정 동일)")
-            print("   비밀번호(Password): 1234")
-            print("   PIN번호(Pin Code): 123456")
+            print("테스트 계정 정보 (모든 계정 동일)")
+            print("비밀번호(Password): 1234")
+            print("PIN번호(Pin Code): 123456")
 
     except Exception as e:
         conn.rollback()
-        print(f"❌ 오류 발생: {e}")
+        print(f"오류 발생: {e}")
     finally:
         conn.close()
 

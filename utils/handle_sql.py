@@ -5,7 +5,7 @@ from dbutils.pooled_db import PooledDB
 
 load_dotenv()
 
-# [수정] 전역 풀 생성 (싱글톤 패턴 효과)
+# 전역 풀 생성
 POOL = PooledDB(
     creator=pymysql,
     mincached=2,
@@ -21,7 +21,6 @@ POOL = PooledDB(
 )
 
 def _get_connection():
-    # [수정] 풀에서 연결을 빌려옴 (매우 빠름)
     return POOL.connection()
 
 def get_data(query, args=None):
@@ -41,7 +40,7 @@ def execute_query(query, args=None):
         with conn.cursor() as cursor:
             cursor.execute(query, args)
             conn.commit()
-            return cursor.rowcount # 영향받은 행의 개수 반환
+            return cursor.rowcount
     except Exception as e:
         conn.rollback()
         raise e

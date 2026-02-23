@@ -21,7 +21,7 @@ def create_user_views(username: str):
     """
     user_id = get_user_id(username)
 
-    # 1️⃣ 사용자 기본 정보
+    # 사용자 기본 정보
     profile_view_sql = f"""
         CREATE OR REPLACE VIEW current_user_profile AS
         SELECT user_id, username, korean_name
@@ -29,7 +29,7 @@ def create_user_views(username: str):
         WHERE user_id = {user_id}
     """
 
-    # 2️⃣ 사용자 계좌 정보
+    # 사용자 계좌 정보
     accounts_view_sql = f"""
         CREATE OR REPLACE VIEW current_user_accounts AS
         SELECT account_id, balance, is_primary, bank_name, bank_code, account_number,account_alias
@@ -37,7 +37,7 @@ def create_user_views(username: str):
         WHERE user_id = {user_id}
     """
 
-    # 3️⃣ 사용자 거래 내역
+    # 사용자 거래 내역
     transactions_view_sql = f"""
         CREATE OR REPLACE VIEW current_user_transactions AS
         SELECT t.transaction_id,

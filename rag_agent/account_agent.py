@@ -12,14 +12,11 @@ from langgraph.graph import StateGraph, START, END
 
 from utils.handle_sql import get_data
 
-# 1. 환경 변수 로드
 load_dotenv()
-
-# 2. LLM 설정
 llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
-# [설정] 프롬프트 경로 설정 및 로딩 함수
+# 프롬프트 경로 설정 및 로딩 함수
 # ---------------------------------------------------------
 CURRENT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = CURRENT_DIR.parent / "rag_agent" / "prompt" / "sql"
@@ -34,21 +31,21 @@ def read_prompt(filename: str) -> str:
         return ""
 
 # ---------------------------------------------------------
-# [NEW] 로그 출력 유틸리티 함수
+# 로그 출력 유틸리티 함수
 # ---------------------------------------------------------
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     
     if status == "start":
         # flush=True 추가
-        print(f"[{now}] ⏳ [{step_name}] 시작...", flush=True) 
+        print(f"[{now}] [{step_name}] 시작...", flush=True) 
         return time.time()
         
     elif status == "end" and start_time is not None:
         elapsed = time.time() - start_time
-        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
-            log_msg += f"\n   👉 {extra_info}"
+            log_msg += f"\n   {extra_info}"
         
         # flush=True 추가
         print(log_msg, flush=True) 
@@ -115,7 +112,7 @@ def run_db_query(query):
         return f"SQL 실행 오류: {e}"
 
 # ---------------------------------------------------------
-# [LangGraph] SQL 에이전트 상태
+# SQL 에이전트 상태
 # ---------------------------------------------------------
 class SQLAgentState(TypedDict, total=False):
     question: str
@@ -127,7 +124,7 @@ class SQLAgentState(TypedDict, total=False):
     response: str
 
 # ---------------------------------------------------------
-# [LangGraph] 노드
+# 노드
 # ---------------------------------------------------------
 def node_schema(state: SQLAgentState) -> dict:
     t0 = print_log("1. 스키마 조회 (node_schema)", "start")
@@ -145,16 +142,12 @@ def node_sql_gen(state: SQLAgentState) -> dict:
         "schema": state["schema"],
     })
     query = clean_sql_query(raw)
-    
-    # 생성된 SQL 쿼리를 터미널에 함께 출력
     print_log("2. SQL 쿼리 생성 (node_sql_gen)", "end", t0, extra_info=f"생성된 SQL:\n      {query}")
     return {"query": query}
 
 def node_execute(state: SQLAgentState) -> dict:
     t0 = print_log("3. SQL 실행 (node_execute)", "start")
     result = run_db_query(state["query"])
-    
-    # 결과의 일부분만 샘플로 출력하여 터미널이 너무 길어지는 것을 방지
     sample_result = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
     print_log("3. SQL 실행 (node_execute)", "end", t0, extra_info=f"실행 결과 일부: {sample_result}")
     return {"result": result}
@@ -221,10 +214,9 @@ def get_sql_answer(question, username, allowed_views=None):
     except Exception as e:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         error_msg = f"데이터 조회 중 오류가 발생했습니다: {e}"
-        print(f"[{now}] ❌ [SQL Agent Error]: {error_msg}")
+        print(f"[{now}] [SQL Agent Error]: {error_msg}")
         return error_msg
 
-# --- 테스트 코드 ---
 if __name__ == "__main__":
     test_views = ["account_summary_view", "transaction_history_view"]
     q = "내 월급통장 잔액이 얼마야?"
