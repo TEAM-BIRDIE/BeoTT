@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="img/벗_로고.png" alt="BeoTT Logo" width="1000"/>
+  <img src="img/벗_로고.png" alt="BeoTT Logo" width="700"/>
 </div>
 
 # 벗 (BeoTT): 대한외국인의 더 쉬운 금융 생활을 위한 맞춤형 AI Agent 서비스
