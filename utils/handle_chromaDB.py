@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-from utils.handle_sql import get_data
-from utils.agent_utils import print_log
+from handle_sql import get_data
+from agent_utils import print_log
 # .env 로드
 load_dotenv()
 
