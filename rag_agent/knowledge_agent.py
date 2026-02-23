@@ -5,19 +5,17 @@ from pathlib import Path
 from typing import TypedDict, Literal, Any
 from dotenv import load_dotenv
 
-# 벡터 DB 및 LLM (LangChain 호환 유지)
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
-from rag_agent.web_search_rag import WebSearchRAG
+from rag_agent.websearch_agent import WebSearchRAG
 
-# 1. 환경 설정
 load_dotenv()
 
-# 경로 설정
+
 CURRENT_FILE_PATH = Path(__file__).resolve()
 PROJECT_ROOT = CURRENT_FILE_PATH.parent.parent
 PROMPT_DIR = CURRENT_FILE_PATH.parent / "prompt" / "finrag"
@@ -28,26 +26,24 @@ COLLECTION_NAME = "financial_terms"
 SIMILARITY_THRESHOLD = 0.6
 WEB_SEARCH_KEYWORDS = ["현재", "최신", "오늘", "주가", "시세", "뉴스", "전망", "날씨", "검색해줘", "얼마야","지금","검색","검색해"]
 
-# 전역 변수
+
 vectorstore = None
 llm = ChatOpenAI(model="gpt-5-mini")
-web_rag = WebSearchRAG() # 웹 검색 인스턴스 생성
+web_rag = WebSearchRAG()
 
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     
     if status == "start":
-        # flush=True 추가
-        print(f"[{now}] ⏳ [{step_name}] 시작...", flush=True) 
+        print(f"[{now}] [{step_name}] 시작...", flush=True) 
         return time.time()
         
     elif status == "end" and start_time is not None:
         elapsed = time.time() - start_time
-        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
-            log_msg += f"\n   👉 {extra_info}"
+            log_msg += f"\n   {extra_info}"
         
-        # flush=True 추가
         print(log_msg, flush=True) 
         return elapsed
 
@@ -58,7 +54,7 @@ def load_prompt(filename: str) -> str:
             return f.read()
     except FileNotFoundError:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
+        print(f"[{now}] [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
         return "{context}\n{question}"
 
 def load_knowledge_base():
@@ -99,7 +95,7 @@ def format_web_result(web_result, original_query, translated_query):
 """
 
 # ---------------------------------------------------------
-# [LangGraph] FinRAG 상태
+# FinRAG 상태
 # ---------------------------------------------------------
 class FinRAGState(TypedDict, total=False):
     korean_query: str
@@ -111,7 +107,7 @@ class FinRAGState(TypedDict, total=False):
     final_output: str
 
 # ---------------------------------------------------------
-# [LangGraph] 노드
+# 노드
 # ---------------------------------------------------------
 def node_route(state: FinRAGState) -> dict:
     t0 = print_log("1. 검색 방식 라우팅 (node_route)", "start")
@@ -145,17 +141,17 @@ def node_db_retrieve(state: FinRAGState) -> dict:
     if vectorstore:
         try:
             results = vectorstore.similarity_search_with_score(korean_query, k=5)
-            print(f"   🔍 [Search] '{korean_query}' DB 검색 수행")
+            print(f"   [Search] '{korean_query}' DB 검색 수행")
             for doc, score in results:
                 if score <= SIMILARITY_THRESHOLD:
                     relevant_docs.append((doc, score))
-                    print(f"      ✅ 채택: {doc.metadata.get('word')} (거리: {score:.4f})")
+                    print(f"      채택: {doc.metadata.get('word')} (거리: {score:.4f})")
                 else:
-                    print(f"      ❌ 제외: {doc.metadata.get('word')} (거리: {score:.4f} > {SIMILARITY_THRESHOLD})")
+                    print(f"      제외: {doc.metadata.get('word')} (거리: {score:.4f} > {SIMILARITY_THRESHOLD})")
             relevant_docs = relevant_docs[:3]
         except Exception as e:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{now}] ⚠️ DB 검색 중 오류: {e}")
+            print(f"[{now}] DB 검색 중 오류: {e}")
             
     print_log("2-B. 벡터 DB 검색 (node_db_retrieve)", "end", t0, extra_info=f"조회된 유효 문서 수: {len(relevant_docs)}개")
     return {"relevant_docs": relevant_docs}

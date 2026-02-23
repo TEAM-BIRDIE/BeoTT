@@ -11,11 +11,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
-
-# 사용자 원본 코드의 유틸리티 (DB 핸들러가 있다고 가정)
 from utils.handle_sql import get_data, execute_query
 
-# 1. 환경 설정
 load_dotenv()
 llm = ChatOpenAI(model="gpt-5-mini")
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -32,33 +29,30 @@ def read_prompt(filename: str) -> str:
         return ""
 
 # ---------------------------------------------------------
-# [NEW] 로그 출력 유틸리티 함수
+# 로그 출력 유틸리티 함수
 # ---------------------------------------------------------
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     
     if status == "start":
-        # flush=True 추가
-        print(f"[{now}] ⏳ [{step_name}] 시작...", flush=True) 
+        print(f"[{now}] [{step_name}] 시작...", flush=True) 
         return time.time()
         
     elif status == "end" and start_time is not None:
         elapsed = time.time() - start_time
-        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
-            log_msg += f"\n   👉 {extra_info}"
-        
-        # flush=True 추가
+            log_msg += f"\n   {extra_info}"
         print(log_msg, flush=True) 
         return elapsed
 
 # ---------------------------------------------------------
-# [설정] 프롬프트 경로 (필요 시 유지, 여기서는 코드 내장 프롬프트 사용)
+# 프롬프트 경로
 # ---------------------------------------------------------
 CURRENT_DIR = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------
-# [LangGraph] 송금 정보 추출 그래프
+# 송금 정보 추출 그래프
 # ---------------------------------------------------------
 class TransferExtractState(TypedDict):
     question: str
@@ -68,12 +62,11 @@ class TransferExtractState(TypedDict):
 def _parse_transfer_json(text: str) -> dict:
     """JSON 파싱 및 예외 처리"""
     try:
-        # 마크다운 코드 블록 제거
         text = text.strip().replace("```json", "").replace("```", "")
         return json.loads(text)
     except Exception as e:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ JSON Parsing Error: {e}, Raw: {text}")
+        print(f"[{now}] JSON Parsing Error: {e}, Raw: {text}")
         return {"target": None, "amount": None, "currency": None}
 
 def _node_extract(state: TransferExtractState) -> dict:
@@ -82,7 +75,6 @@ def _node_extract(state: TransferExtractState) -> dict:
     """
     t0 = print_log("1. LLM 송금 정보 추출 (node_extract)", "start")
     
-    # 한국어 금액 단위 처리 및 JSON 강제 프롬프트
     template = read_prompt("transfer_01_extract.md")
     
     prompt = PromptTemplate.from_template(template)
@@ -112,7 +104,7 @@ def _invoke_transfer_extract(question: str) -> dict:
     return result.get("extracted", {"target": None, "amount": None, "currency": None})
 
 # ---------------------------------------------------------
-# [New] LLM 기반 연락처 의미 매칭 함수
+# LLM 기반 연락처 의미 매칭 함수
 # ---------------------------------------------------------
 def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str | None:
     """
@@ -125,7 +117,6 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info="연락처 목록이 비어있음")
         return None
 
-    # 후보 리스트 텍스트화
     candidates_str = "\n".join([
         f"- Name: {c['contact_name']} (Relationship: {c.get('relationship', 'N/A')})" 
         for c in contacts
@@ -139,12 +130,9 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
     try:
         matched_name = chain.invoke({"user_input": user_input, "candidates": candidates_str}).strip()
         
-        # "NONE"이거나 이상한 문자열이 반환될 경우 처리
         if matched_name == "NONE":
             print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info="적절한 매칭 대상 없음 (NONE)")
             return None
-        
-        # LLM이 반환한 이름이 실제 리스트에 존재하는지 재검증 (환각 방지)
         for c in contacts:
             if c["contact_name"] == matched_name:
                 print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info=f"매칭 성공: '{matched_name}'")
@@ -155,20 +143,18 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         
     except Exception as e:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ⚠️ LLM Matching Error: {e}")
+        print(f"[{now}] LLM Matching Error: {e}")
         return None
 
 # ---------------------------------------------------------
 # DB 검증 및 로직 함수들
 # ---------------------------------------------------------
-
 def get_member_id(username):
     query = f"SELECT user_id FROM members WHERE username = '{username}'"
     result = get_data(query)
     return result[0]["user_id"] if result else None
 
 def get_contact(user_id, target):
-    # target 이름으로 정확히 조회
     query = f"""
     SELECT contact_id, contact_name, relationship, target_currency_code
     FROM contacts
@@ -196,14 +182,14 @@ def resolve_contact_name(user_id, user_input):
     user_input_clean = user_input.strip()
     user_input_lower = user_input_clean.lower()
 
-    # 1. 1차 시도: 정확한 문자열 매칭 (Python Loop) - 속도 최우선
+    # 1차 시도: 정확한 문자열 매칭
     for c in contacts:
         if user_input_lower == c["contact_name"].lower():
             return c["contact_name"]
         if c.get("relationship") and user_input_lower == str(c["relationship"]).lower():
             return c["contact_name"]
             
-    # 2. 2차 시도: LLM을 이용한 의미론적 매칭
+    # 2차 시도: LLM을 이용한 의미론적 매칭
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     print(f"[{now}] 🔀 '{user_input}' 정확한 DB 매칭 실패. LLM 매칭 시도...")
     matched_name = _find_best_match_contact_llm(user_input_clean, contacts)
@@ -267,7 +253,6 @@ def insert_ledger(
 # ---------------------------------------------------------
 # 메인 송금 로직
 # ---------------------------------------------------------
-
 def process_transfer(question: str, username: str, context: dict | None = None):
 
     context = context or {}
@@ -395,7 +380,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         print_log(f"누락된 정보({field}) 보완 처리", "end", t0_hitl, extra_info=f"성공적으로 보완됨: {context.get(field)}")
 
     # --------------------------------------------------
-    # 4. 최초 요청 (LangGraph 추출)
+    # 4. 최초 요청
     # --------------------------------------------------
     if not context.get("target") and not context.get("amount"):
         info = _invoke_transfer_extract(question)
@@ -407,7 +392,6 @@ def process_transfer(question: str, username: str, context: dict | None = None):
     amount   = context.get("amount")
     currency = context.get("currency")
 
-    # 대상 검증 및 해결
     if not target:
         context["missing_field"] = "target"
         return {
@@ -428,7 +412,6 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         }
     context["target"] = resolved
 
-    # 금액 검증
     if not amount:
         context["missing_field"] = "amount"
         return {
@@ -442,7 +425,6 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         context["currency"] = "KRW"
         currency = "KRW"
 
-    # 환율 및 잔액 체크
     rate = get_exchange_rate(currency)
     if rate is None:
         return {"status": "ERROR", "message": f"{currency} 환율 정보를 찾을 수 없습니다."}
@@ -493,7 +475,7 @@ def get_transfer_answer(question, username, context=None):
     except Exception as e:
         import traceback
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ Transfer Agent 오류: {e}")
+        print(f"[{now}] Transfer Agent 오류: {e}")
         traceback.print_exc()
         return {"status": "ERROR", "message": f"시스템 오류가 발생했습니다: {e}"}
 
