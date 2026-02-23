@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph, START, END
 
 from rag_agent.websearch_agent import WebSearchRAG
 from utils.agent_utils import read_prompt, print_log
-from utils.handle_chromaDB import load_knowledge_base
+from utils.handle_chromaDB import load_knowledge_base 
 
 load_dotenv()
 

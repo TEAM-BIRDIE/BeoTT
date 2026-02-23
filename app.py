@@ -159,7 +159,7 @@ def init_chroma_connection():
             needs_setup = True
             
     if needs_setup:
-        print(f"DB 데이터가 비어있어 'utils/set_chromaDB.py' 스크립트를 실행합니다.")
+        print(f"DB 데이터가 비어있어 'utils/handle_chromaDB.py' 스크립트를 실행합니다.")
         try:
             subprocess.run([sys.executable, "utils/handle_chromaDB.py"], check=True)
             print("DB 초기화 및 데이터 임베딩이 성공적으로 완료되었습니다.")

@@ -100,7 +100,7 @@ def load_knowledge_base():
     global vectorstore
     
     if vectorstore is not None:
-        return
+        return vectorstore
     CHROMA_DB_PATH = "data/financial_terms"
     COLLECTION_NAME = "financial_terms"
     
@@ -118,6 +118,8 @@ def load_knowledge_base():
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         print(f"[{now}] ❌ ChromaDB 연결 오류: {e}")
         vectorstore = None
+
+    return vectorstore
 
 
 if __name__ == "__main__":
