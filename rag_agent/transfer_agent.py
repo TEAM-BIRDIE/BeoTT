@@ -1,6 +1,4 @@
-import os
 import json
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import TypedDict, List
@@ -11,45 +9,15 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
-from utils.handle_sql import get_data, execute_query
+
+import utils.handle_sql as sql
+from utils.agent_utils import read_prompt, print_log
 
 load_dotenv()
-llm = ChatOpenAI(model="gpt-5-mini")
 CURRENT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = CURRENT_DIR / "prompt" / "transfer"
 
-def read_prompt(filename: str) -> str:
-    file_path = PROMPT_DIR / filename
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
-        return ""
-
-# ---------------------------------------------------------
-# 로그 출력 유틸리티 함수
-# ---------------------------------------------------------
-def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    
-    if status == "start":
-        print(f"[{now}] [{step_name}] 시작...", flush=True) 
-        return time.time()
-        
-    elif status == "end" and start_time is not None:
-        elapsed = time.time() - start_time
-        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
-        if extra_info:
-            log_msg += f"\n   {extra_info}"
-        print(log_msg, flush=True) 
-        return elapsed
-
-# ---------------------------------------------------------
-# 프롬프트 경로
-# ---------------------------------------------------------
-CURRENT_DIR = Path(__file__).resolve().parent
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
 # 송금 정보 추출 그래프
@@ -75,7 +43,7 @@ def _node_extract(state: TransferExtractState) -> dict:
     """
     t0 = print_log("1. LLM 송금 정보 추출 (node_extract)", "start")
     
-    template = read_prompt("transfer_01_extract.md")
+    template = read_prompt(PROMPT_DIR, "transfer_01_extract.md")
     
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
@@ -122,7 +90,7 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         for c in contacts
     ])
 
-    template = read_prompt("transfer_02_contact_match.md")
+    template = read_prompt(PROMPT_DIR, "transfer_02_contact_match.md")
     
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
@@ -146,36 +114,14 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         print(f"[{now}] LLM Matching Error: {e}")
         return None
 
-# ---------------------------------------------------------
-# DB 검증 및 로직 함수들
-# ---------------------------------------------------------
-def get_member_id(username):
-    query = f"SELECT user_id FROM members WHERE username = '{username}'"
-    result = get_data(query)
-    return result[0]["user_id"] if result else None
-
-def get_contact(user_id, target):
-    query = f"""
-    SELECT contact_id, contact_name, relationship, target_currency_code
-    FROM contacts
-    WHERE user_id = {user_id}
-    AND contact_name = '{target}'
-    """
-    result = get_data(query)
-    return result[0] if result else None
-
-def get_all_contacts(user_id):
-    query = f"SELECT contact_name, relationship FROM contacts WHERE user_id = {user_id}"
-    return get_data(query)
-
-def resolve_contact_name(user_id, user_input):
+def _resolve_contact_name(user_id, user_input):
     """
     사용자 입력을 바탕으로 정확한 DB 내 연락처 이름(contact_name)을 찾습니다.
     1. 정확한 이름 매칭
     2. 관계(relationship) 매칭
     3. LLM 의미 기반 매칭 (New)
     """
-    contacts = get_all_contacts(user_id)
+    contacts = sql.get_all_contacts(user_id)
     if not contacts:
         return None
         
@@ -199,57 +145,6 @@ def resolve_contact_name(user_id, user_input):
 
     return None
 
-def get_primary_account(user_id):
-    query = f"""
-    SELECT account_id, balance
-    FROM accounts
-    WHERE user_id = {user_id}
-    AND is_primary = 1
-    """
-    result = get_data(query)
-    return result[0] if result else None
-
-def get_user_password(username):
-    query = f"SELECT pin_code FROM members WHERE username = '{username}'"
-    result = get_data(query)
-    return result[0]["pin_code"] if result else None
-
-def get_exchange_rate(currency):
-    if currency == "KRW":
-        return 1.0
-
-    query = f"""
-    SELECT send_rate
-    FROM exchange_rates
-    WHERE currency_code = '{currency}'
-    ORDER BY reference_date DESC
-    LIMIT 1
-    """
-    result = get_data(query)
-    if not result:
-        return None
-    return float(result[0]["send_rate"])
-
-def update_balance(account_id, new_balance):
-    query = f"UPDATE accounts SET balance = {new_balance} WHERE account_id = {account_id}"
-    execute_query(query)
-
-def insert_ledger(
-    account_id, contact_id, amount_krw, balance_after,
-    exchange_rate, target_amount, target_currency
-):
-    query = f"""
-    INSERT INTO ledger (
-        account_id, contact_id, transaction_type, amount, balance_after,
-        exchange_rate, target_amount, target_currency_code, description, category
-    )
-    VALUES (
-        {account_id}, {contact_id}, 'TRANSFER', {-amount_krw}, {balance_after},
-        {exchange_rate}, {target_amount}, '{target_currency}', '송금', '이체'
-    )
-    """
-    execute_query(query)
-
 # ---------------------------------------------------------
 # 메인 송금 로직
 # ---------------------------------------------------------
@@ -257,7 +152,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
 
     context = context or {}
 
-    user_id = get_member_id(username)
+    user_id = sql.get_member_id(username)
     if not user_id:
         return {"status": "ERROR", "message": "사용자를 찾을 수 없습니다."}
 
@@ -266,7 +161,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
     # --------------------------------------------------
     if context.get("awaiting_password"):
         t0_pin = print_log("송금 승인: PIN 검증 및 트랜잭션 실행", "start")
-        stored_pin = get_user_password(username)
+        stored_pin = sql.get_user_password(username)
         if not stored_pin:
             return {"status": "ERROR", "message": "사용자 정보를 찾을 수 없습니다."}
 
@@ -288,13 +183,13 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             }
 
         # 송금 실행 (DB 업데이트)
-        account = get_primary_account(user_id)
-        contact = get_contact(user_id, context["target"]) 
+        account = sql.get_primary_account(user_id)
+        contact = sql.get_contact(user_id, context["target"]) 
 
         new_balance = float(account["balance"]) - context["amount_krw"]
-        update_balance(account["account_id"], new_balance)
+        sql.update_balance(account["account_id"], new_balance)
 
-        insert_ledger(
+        sql.insert_ledger(
             account["account_id"],
             contact["contact_id"],
             context["amount_krw"],
@@ -349,7 +244,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         t0_hitl = print_log(f"누락된 정보({field}) 보완 처리", "start")
 
         if field == "target":
-            resolved = resolve_contact_name(user_id, question)
+            resolved = _resolve_contact_name(user_id, question)
             if not resolved:
                 print_log(f"누락된 정보({field}) 보완 처리", "end", t0_hitl, extra_info="연락처 조회 실패")
                 return {
@@ -401,7 +296,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             "context": context
         }
 
-    resolved = resolve_contact_name(user_id, target)
+    resolved = _resolve_contact_name(user_id, target)
     if not resolved:
         context["missing_field"] = "target"
         return {
@@ -425,11 +320,11 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         context["currency"] = "KRW"
         currency = "KRW"
 
-    rate = get_exchange_rate(currency)
+    rate = sql.get_exchange_rate(currency)
     if rate is None:
         return {"status": "ERROR", "message": f"{currency} 환율 정보를 찾을 수 없습니다."}
 
-    account = get_primary_account(user_id)
+    account = sql.get_primary_account(user_id)
     if not account:
         return {"status": "ERROR", "message": "주 계좌를 찾을 수 없습니다."}
 

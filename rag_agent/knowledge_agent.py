@@ -1,98 +1,27 @@
-import os
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import TypedDict, Literal, Any
+from typing import TypedDict, Literal
 from dotenv import load_dotenv
 
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
 from rag_agent.websearch_agent import WebSearchRAG
+from utils.agent_utils import read_prompt, print_log
+from utils.handle_chromaDB import load_knowledge_base
 
 load_dotenv()
 
-
-CURRENT_FILE_PATH = Path(__file__).resolve()
-PROJECT_ROOT = CURRENT_FILE_PATH.parent.parent
-PROMPT_DIR = CURRENT_FILE_PATH.parent / "prompt" / "finrag"
-
-CHROMA_DB_PATH = PROJECT_ROOT / "data" / "financial_terms"
-COLLECTION_NAME = "financial_terms"
+CURRENT_DIR = Path(__file__).resolve().parent
+PROMPT_DIR = CURRENT_DIR / "prompt" / "finrag"
 
 SIMILARITY_THRESHOLD = 0.6
 WEB_SEARCH_KEYWORDS = ["현재", "최신", "오늘", "주가", "시세", "뉴스", "전망", "날씨", "검색해줘", "얼마야","지금","검색","검색해"]
 
-
-vectorstore = None
 llm = ChatOpenAI(model="gpt-5-mini")
 web_rag = WebSearchRAG()
-
-def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    
-    if status == "start":
-        print(f"[{now}] [{step_name}] 시작...", flush=True) 
-        return time.time()
-        
-    elif status == "end" and start_time is not None:
-        elapsed = time.time() - start_time
-        log_msg = f"[{now}] [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
-        if extra_info:
-            log_msg += f"\n   {extra_info}"
-        
-        print(log_msg, flush=True) 
-        return elapsed
-
-def load_prompt(filename: str) -> str:
-    file_path = PROMPT_DIR / filename
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
-        return "{context}\n{question}"
-
-def load_knowledge_base():
-    """ChromaDB 연결 설정"""
-    global vectorstore
-    if vectorstore is not None:
-        return
-        
-    t0 = print_log("RAG ChromaDB 연결", "start")
-    try:
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-        vectorstore = Chroma(
-            persist_directory=str(CHROMA_DB_PATH),
-            embedding_function=embeddings,
-            collection_name=COLLECTION_NAME,
-            collection_metadata={"hnsw:space": "l2"},
-        )
-        print_log("RAG ChromaDB 연결", "end", t0, extra_info=f"Metric: L2, 경로: {CHROMA_DB_PATH}")
-    except Exception as e:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ ChromaDB 연결 오류: {e}")
-        vectorstore = None
-
-def format_web_result(web_result, original_query, translated_query):
-    citations = [f"- **{src['title']}**: {src['url']}" for src in web_result.get("sources", [])]
-    citation_text = "\n".join(citations) if citations else "- 출처 정보 없음"
-    return f"""
-### 🌏 질문
-- **Original**: {original_query if original_query else translated_query}
-- **Translated**: {translated_query}
-
-### 🌐 FinBot의 웹 검색 답변
-{web_result['answer']}
-
----
-### 📚 참고 웹사이트
-{citation_text}
-"""
 
 # ---------------------------------------------------------
 # FinRAG 상태
@@ -124,23 +53,21 @@ def node_web_search(state: FinRAGState) -> dict:
     original_query = state.get("original_query")
     
     web_result = web_rag.web_search(korean_query)
-    final_output = format_web_result(web_result, original_query, korean_query)
+    final_output = web_rag.format_web_result(web_result, original_query, korean_query)
     
     print_log("2-A. 웹 검색 수행 (node_web_search)", "end", t0, extra_info="웹 검색 완료 및 포맷팅")
     return {"final_output": final_output}
 
 def node_db_retrieve(state: FinRAGState) -> dict:
     t0 = print_log("2-B. 벡터 DB 검색 (node_db_retrieve)", "start")
-    global vectorstore
-    if vectorstore is None:
-        load_knowledge_base()
+    vs = load_knowledge_base()
         
     korean_query = state["korean_query"]
     relevant_docs = []
     
-    if vectorstore:
+    if vs:
         try:
-            results = vectorstore.similarity_search_with_score(korean_query, k=5)
+            results = vs.similarity_search_with_score(korean_query, k=5)
             print(f"   [Search] '{korean_query}' DB 검색 수행")
             for doc, score in results:
                 if score <= SIMILARITY_THRESHOLD:
@@ -177,7 +104,7 @@ def node_db_answer(state: FinRAGState) -> dict:
         context_text += f"- **{word}**: {definition}\n"
         citations.append(f"- **{word}**: {definition[:60]}... (거리: {score:.4f})")
 
-    system_template = load_prompt("finrag_01_system.md")
+    system_template = read_prompt(PROMPT_DIR, "finrag_01_system.md")
     rag_prompt = PromptTemplate.from_template(system_template)
     rag_chain = rag_prompt | llm | StrOutputParser()
     
@@ -235,9 +162,6 @@ def get_rag_answer(korean_query, original_query=None):
     print("\n" + "-"*50)
     total_t0 = print_log("FinRAG 에이전트 파이프라인", "start")
     
-    if vectorstore is None:
-        load_knowledge_base()
-        
     graph = _get_finrag_graph()
     initial: FinRAGState = {"korean_query": korean_query, "original_query": original_query}
     result = graph.invoke(initial)
@@ -249,7 +173,6 @@ def get_rag_answer(korean_query, original_query=None):
     return result.get("final_output", "답변을 생성하지 못했습니다.")
 
 if __name__ == "__main__":
-    load_knowledge_base()
     print(get_rag_answer("금리가 뭐야?"))
     print("=" * 60)
     print(get_rag_answer("현재 삼성전자 주가 알려줘"))
