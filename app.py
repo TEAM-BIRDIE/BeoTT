@@ -17,7 +17,7 @@ load_dotenv()
 # ==========================================
 # 1. 페이지 설정 및 디자인
 # ==========================================
-st.set_page_config(page_title="BeoTT Buddy", page_icon="img/버디_기본.png", layout="centered")
+st.set_page_config(page_title="BeoTT", page_icon="img/버디_확대.png", layout="centered")
 
 def local_css():
     # ==========================================
@@ -356,11 +356,11 @@ def chat_page():
             st.session_state["last_result"] = None
             st.rerun()
 
-    st.caption("🔒 BeoTT Service | Powered by Buddy-Agent")
+    st.caption("🔒 BeoTT Service | Powered by BIRDIE-Agent")
 
     for message in st.session_state['messages']:
         if message["role"] == "assistant":
-            with st.chat_message(message["role"], avatar="img/버디_기본.png"):
+            with st.chat_message(message["role"], avatar="img/버디_확대.png"):
                 st.markdown(message["content"])
         else:
             with st.chat_message(message["role"], avatar="👤"):
