@@ -1,13 +1,19 @@
 import os
 from datetime import datetime
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
 import chromadb
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-from handle_sql import get_data
-from agent_utils import print_log
+from utils.handle_sql import get_data
+from utils.agent_utils import print_log
 # .env 로드
 load_dotenv()
 
