@@ -46,7 +46,7 @@ def reset_global_context():
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         f.write("# 대화 기록\n\n")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    print(f"[{now}] 🧹 [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
+    print(f"[{now}] [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
 
 web_rag = WebSearchRAG()
 
@@ -62,7 +62,7 @@ def read_prompt(filename: str) -> str:
             return f.read()
     except FileNotFoundError:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
+        print(f"[{now}] [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
         return ""
 
 # ---------------------------------------------------------
@@ -188,13 +188,13 @@ def node_route(state: MainAgentState) -> dict:
     print_log("Step 3: 의도 분류 및 라우팅 (node_route)", "end", t0, extra_info=f"분류된 카테고리: [{category}]")
     return {"category": category}
 
-def node_sql(state: MainAgentState) -> dict:
+def node_account(state: MainAgentState) -> dict:
     t0 = print_log("Sub-Agent: SQL Agent 호출", "start")
     answer = get_sql_answer(state["refined_query"], state["username"], state.get("allowed_views") or [])
     print_log("Sub-Agent: SQL Agent 호출", "end", t0)
     return {"korean_answer": answer}
 
-def node_finrag(state: MainAgentState) -> dict:
+def node_knowledge(state: MainAgentState) -> dict:
     t0 = print_log("Sub-Agent: FinRAG Agent 호출", "start")
     answer = get_rag_answer(state["refined_query"], original_query=state["question"])
     print_log("Sub-Agent: FinRAG Agent 호출", "end", t0)
@@ -290,8 +290,8 @@ def _build_main_graph():
     builder.add_node("translate", node_translate)
     builder.add_node("refine", node_refine)
     builder.add_node("route", node_route)
-    builder.add_node("sql", node_sql)
-    builder.add_node("finrag", node_finrag)
+    builder.add_node("sql", node_account)
+    builder.add_node("finrag", node_knowledge)
     builder.add_node("transfer", node_transfer)
     builder.add_node("system", node_system)
     builder.add_node("fallback", node_fallback)
