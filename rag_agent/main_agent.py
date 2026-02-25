@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph, START, END
 
 from utils.agent_utils import read_prompt, print_log
 
-from tools.account_agent import get_sql_answer
+from tools.approach_account import get_sql_answer
 from rag_agent.knowledge_agent import get_rag_answer
 from rag_agent.transfer_agent import get_transfer_answer
 
