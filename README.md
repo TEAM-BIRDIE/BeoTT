@@ -14,6 +14,7 @@
   <p><em>여러분의 친절한 금융 친구, '버디'입니다!</em></p>
 </div>
 
+[![BeoTT_시연영상](./img/벗_썸네일.jpg)](https://youtu.be/zv_8sMCtUgA)
 <br/>
 
 ## 📖 프로젝트 소개 (About the Project)
