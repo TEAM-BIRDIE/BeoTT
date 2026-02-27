@@ -8,7 +8,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
-from rag_agent.websearch_agent import WebSearchRAG
+from tools.run_websearch import WebSearchRAG
 from utils.agent_utils import read_prompt, print_log
 from utils.handle_chromaDB import load_knowledge_base 
 
